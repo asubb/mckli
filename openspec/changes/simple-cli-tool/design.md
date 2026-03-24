@@ -24,31 +24,48 @@ commands.
 
 ### CLI Library Choice
 
-Use `kotlinx-cli` for argument parsing. It's official, multiplatform-compatible, and lightweight.
+Use **Clikt 5.1.0** for argument parsing and command structure.
+
+**Rationale:**
+- Actively maintained (unlike kotlinx-cli which is deprecated)
+- Full multiplatform support including linuxArm64
+- Rich feature set with excellent API design
+- Built-in subcommand support eliminates need for custom command pattern
 
 **Alternatives considered:**
-
-- `clikt`: More feature-rich but adds complexity we don't need yet
+- `kotlinx-cli`: Deprecated, limited platform support (no linuxArm64)
 - Manual parsing: Error-prone and time-consuming
 
-### Command Structure
+### Architecture
 
-Implement a simple command pattern with a `Command` interface. Each command (help, hello) implements this interface.
+Use Clikt's `CliktCommand` base class directly for all commands. Each command (help, hello) extends `CliktCommand`.
 
-**Rationale:** Makes it easy to add new commands later without modifying core CLI logic.
+**Rationale:**
+- Clikt provides built-in command routing and help generation
+- No need for custom `Command` interface or `CommandRegistry`
+- Cleaner, more maintainable code with less boilerplate
+
+### Kotlin Multiplatform Configuration
+
+**Targets:**
+- JVM (primary development target)
+- Native: macosArm64, macosX64, linuxX64, mingwX64
+
+**Platform Limitations:**
+- Linux ARM64 cannot compile native targets (Kotlin Native limitation - no prebuilt compiler)
+- Native binaries can be cross-compiled from other supported platforms
 
 ### Entry Point
 
-Create a `Main.kt` with platform-specific entry points:
-
-- JVM: Standard `main(args: Array<String>)`
-- Native: `fun main(args: Array<String>)`
-
-Use expect/actual for any platform-specific code if needed.
+Single unified entry point using Clikt's extension function:
+```kotlin
+fun main(args: Array<String>) = MckliCommand()
+    .subcommands(HelpCommand(), HelloCommand())
+    .main(args)
+```
 
 ## Risks / Trade-offs
 
-**[Risk]** `kotlinx-cli` might not cover future complex CLI needs → **Mitigation:** Start simple, refactor to `clikt` if
-requirements grow
+**[Trade-off]** Cannot build native binaries directly on Linux ARM64 → Acceptable: JVM target works on all platforms, native can be cross-compiled
 
-**[Trade-off]** Command pattern adds abstraction overhead for just 2 commands → Acceptable for future extensibility
+**[Trade-off]** Clikt is a larger dependency than kotlinx-cli → Acceptable: Better maintained, more features, saves custom code
