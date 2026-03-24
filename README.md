@@ -1,213 +1,331 @@
-# mckli - Simple CLI Tool
+# mckli - MCP CLI Wrapper
 
-A Kotlin Multiplatform command-line interface tool demonstrating modern CLI development with Clikt.
+A Kotlin Multiplatform CLI wrapper for MCP (Model Context Protocol) servers that reduces token usage by maintaining
+persistent HTTP connections through daemon processes and caching tool metadata.
+
+## Overview
+
+**mckli** acts as a bridge between LLMs and MCP servers, solving the token cost problem of repeated connection overhead.
+It:
+
+- 🔄 **Maintains persistent connections** - Daemon processes keep HTTP connections alive to MCP servers
+- 💾 **Caches tool metadata** - Tools are discovered once and cached, eliminating repeated discovery calls
+- 🚀 **Exposes tools as CLI commands** - LLMs can invoke MCP tools via simple shell commands
+- ⚡ **Auto-starts daemons** - Daemons launch automatically on first request
+- 🌐 **Supports multiple servers** - Manage and connect to multiple MCP servers simultaneously
+
+## Architecture
+
+```
+┌─────────────────┐
+│   LLM / User    │
+└────────┬────────┘
+         │ Simple CLI commands
+         │
+    ┌────▼─────┐
+    │   mckli  │  (stateless CLI)
+    └────┬─────┘
+         │ Unix socket IPC
+         │
+    ┌────▼──────────┐
+    │    Daemon     │  (per MCP server)
+    │  - HTTP Pool  │
+    │  - Tool Cache │
+    └────┬──────────┘
+         │ Persistent HTTP
+         │
+    ┌────▼────────────┐
+    │   MCP Server    │
+    └─────────────────┘
+```
 
 ## Quick Start
 
-```bash
-# Build the project
-./gradlew build
-
-# Run with help
-./gradlew jvmRun --args="--help"
-
-# Run hello command
-./gradlew jvmRun --args="hello"
-./gradlew jvmRun --args="hello World"
-```
-
-## Features
-
-- **Cross-platform**: Targets JVM and Native platforms (macOS, Linux, Windows)
-- **Modern CLI framework**: Built with [Clikt 5.1.0](https://github.com/ajalt/clikt)
-- **Extensible architecture**: Easy to add new commands
-- **Type-safe**: Leverages Kotlin's type system for safer CLI development
-
-## Requirements
-
-- Java 21 or higher
-- Gradle 9.4.1+ (included via wrapper)
-
-## Building
-
-### Build All Targets (Recommended)
+### 1. Build the Application
 
 ```bash
-./gradlew build
-```
+# Build self-contained JAR with all dependencies
+./gradlew fatJar
 
-This builds the JVM target and creates a distributable JAR that works on all platforms.
-
-### Build Native Binary (Platform-specific)
-
-**macOS:**
-```bash
+# Or build native binary (Linux x64, macOS, Windows)
 ./gradlew linkReleaseExecutableNative
 ```
 
-**Linux x64:**
+**Artifacts:**
+- JAR: `build/libs/mckli-all.jar`
+- Native: `build/bin/native/releaseExecutable/mckli.kexe`
+
+For convenience, create an alias:
 ```bash
-./gradlew linkReleaseExecutableNative
+# For JAR (Java 21+)
+alias mckli='java --enable-native-access=ALL-UNNAMED -jar /path/to/build/libs/mckli-all.jar'
+
+# For native binary
+alias mckli='/path/to/build/bin/native/releaseExecutable/mckli.kexe'
 ```
 
-**Windows:**
-```bash
-gradlew.bat linkReleaseExecutableNative
-```
-
-**Note:** Native compilation is not available on Linux ARM64 hosts due to Kotlin Native limitations (no prebuilt compiler available). Use the JVM target on ARM64, or cross-compile from another platform.
-
-## Running
-
-### Run with Gradle (JVM)
+### 2. Configure an MCP Server
 
 ```bash
-# Show help
-./gradlew jvmRun --args="--help"
+# Add your first MCP server
+mckli config add myserver https://mcp.example.com/api
 
-# Run hello command
-./gradlew jvmRun --args="hello"
+# With authentication
+mckli config add myserver https://mcp.example.com/api --token YOUR_TOKEN
 
-# Run hello with name
-./gradlew jvmRun --args="hello World"
+# List configured servers
+mckli config list
 ```
 
-### Run Native Binary
+### 3. Start the Daemon
 
-After building with `linkReleaseExecutableNative`, the native binary will be at:
-```
-build/bin/native/releaseExecutable/mckli
-```
-
-Run it directly:
 ```bash
-./build/bin/native/releaseExecutable/mckli --help
-./build/bin/native/releaseExecutable/mckli hello
-./build/bin/native/releaseExecutable/mckli hello World
+# Start daemon for your server (happens automatically on first use)
+mckli daemon start myserver
+
+# Check daemon status
+mckli daemon status
 ```
+
+### 4. Use MCP Tools
+
+```bash
+# List available tools
+mckli tools list myserver
+
+# Get tool details
+mckli tools describe myserver read-file
+
+# Call a tool
+mckli tools call myserver read-file --json '{"path": "/tmp/file.txt"}'
+```
+
+## Key Features
+
+### Persistent Connections
+
+- One daemon per MCP server maintains long-lived HTTP connections
+- Connection pool with configurable size (default: 10)
+- Automatic connection lifecycle management (idle timeout, max lifetime)
+
+### Tool Caching
+
+- Tools fetched once on daemon startup
+- Cached in memory for instant access
+- Manual refresh available via `tools refresh`
+
+### LLM Integration
+
+- Simple CLI interface: `mckli tools call <server> <tool> --json <args>`
+- JSON output for easy parsing
+- Error messages include context for debugging
+
+### Multi-Server Support
+
+- Configure multiple MCP servers
+- Each gets its own daemon process
+- Default server selection for convenience
 
 ## Commands
 
-### Built-in Help
-Clikt automatically provides `--help` (or `-h`) for all commands:
+### Configuration Management
 
 ```bash
-mckli --help          # Show all commands
-mckli hello --help    # Show help for hello command
+# Add a server
+mckli config add <name> <endpoint> [--username USER --password PASS | --token TOKEN]
+
+# Remove a server
+mckli config remove <name>
+
+# List servers
+mckli config list
+
+# Edit configuration (opens config file path)
+mckli config edit
 ```
 
-### `hello [NAME]`
-Display a greeting message. Optionally provide a name to personalize the greeting.
+### Daemon Management
 
 ```bash
-mckli hello           # Prints: Hello, World!
-mckli hello Alice     # Prints: Hello, Alice!
+# Start a daemon
+mckli daemon start <server>
+
+# Stop a daemon
+mckli daemon stop <server> [--force]
+
+# Check status
+mckli daemon status
+
+# Restart
+mckli daemon restart <server>
 ```
+
+### Tool Operations
+
+```bash
+# List tools
+mckli tools list [server] [--filter PATTERN]
+
+# Describe a tool
+mckli tools describe [server] <tool-name>
+
+# Call a tool
+mckli tools call [server] <tool-name> --json '{"arg": "value"}'
+
+# Refresh tool cache
+mckli tools refresh [server]
+```
+
+## Documentation
+
+- **[User Manual](docs/user/README.md)** - Complete usage guide with examples
+- **[Developer Guide](docs/dev/README.md)** - Architecture and development documentation
+
+## Requirements
+
+- **Java 21 or higher**
+- **Gradle 9.4.1+** (included via wrapper)
+- **Unix-like OS** (Linux, macOS) for full functionality
+    - Windows support via named pipes (limited testing)
+
+## Building
+
+### For Users (Distribution)
+
+**Fat JAR (recommended - works everywhere with Java):**
+```bash
+./gradlew fatJar
+# Output: build/libs/mckli-all.jar
+# Run: java --enable-native-access=ALL-UNNAMED -jar build/libs/mckli-all.jar
+```
+
+**Native Binary (faster startup, platform-specific):**
+```bash
+./gradlew linkReleaseExecutableNative
+# Output: build/bin/native/releaseExecutable/mckli.kexe
+```
+
+**Note:** Native compilation not available on Linux ARM64 hosts. Use JVM target on ARM64.
+
+### For Developers
+
+**Run without building:**
+```bash
+./gradlew run --args="daemon status"
+```
+
+**Run tests:**
+```bash
+./gradlew test       # All tests
+./gradlew jvmTest    # JVM tests only
+```
+
+**Build and test everything:**
+```bash
+./gradlew build
+```
+
+## Technology Stack
+
+| Component                 | Version | Purpose                |
+|---------------------------|---------|------------------------|
+| **Kotlin**                | 2.3.20  | Multiplatform language |
+| **Clikt**                 | 5.1.0   | CLI framework          |
+| **Ktor**                  | 2.3.12  | HTTP client            |
+| **kotlinx.serialization** | 1.7.3   | JSON handling          |
+| **kotlinx.coroutines**    | 1.9.0   | Async operations       |
+
+## Configuration
+
+Configuration stored in `~/.config/mckli/servers.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "myserver",
+      "endpoint": "https://mcp.example.com/api",
+      "auth": {
+        "type": "Bearer",
+        "token": "..."
+      },
+      "timeout": 30000,
+      "poolSize": 10
+    }
+  ],
+  "defaultServer": "myserver"
+}
+```
+
+Daemon state in `~/.config/mckli/daemons/`:
+
+- `<server-name>.pid` - Process ID files
+- `<server-name>.sock` - Unix domain sockets
+- `<server-name>.log` - Daemon logs
+
+## Development
+
+See [Developer Guide](docs/dev/README.md) for:
+
+- Architecture details
+- Code organization
+- Testing guidelines
+- Contributing workflow
 
 ## Project Structure
 
 ```
 mckli/
 ├── src/
-│   └── commonMain/kotlin/com/mckli/
-│       ├── Main.kt                      # Application entry point
-│       ├── MckliCommand.kt              # Root CLI command
-│       └── commands/
-│           └── HelloCommand.kt          # Hello command implementation
-├── build.gradle.kts                     # Build configuration
-├── settings.gradle.kts                  # Project settings
-├── gradle.properties                    # Gradle properties
-└── openspec/                            # OpenSpec change documentation
-    └── changes/simple-cli-tool/
-        ├── proposal.md                  # Why and what
-        ├── design.md                    # Technical decisions
-        ├── specs/                       # Requirements specifications
-        └── tasks.md                     # Implementation checklist
+│   ├── commonMain/kotlin/com/mckli/
+│   │   ├── config/          # Configuration management
+│   │   ├── daemon/          # Daemon lifecycle
+│   │   ├── http/            # HTTP client & connection pool
+│   │   ├── ipc/             # Unix socket IPC
+│   │   ├── client/          # Request routing
+│   │   ├── tools/           # Tool discovery & invocation
+│   │   └── Main.kt
+│   ├── jvmMain/kotlin/      # JVM-specific implementations
+│   └── nativeMain/kotlin/   # Native-specific implementations
+├── docs/
+│   ├── user/                # User documentation
+│   └── dev/                 # Developer documentation
+├── openspec/                # OpenSpec change documentation
+└── build.gradle.kts
 ```
 
-## Adding New Commands
+## Troubleshooting
 
-To add a new command:
-
-1. Create a new file in `src/commonMain/kotlin/com/mckli/commands/`:
-
-```kotlin
-// MyCommand.kt
-package com.mckli.commands
-
-import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.clikt.parameters.arguments.optional
-
-class MyCommand : CliktCommand(name = "mycommand") {
-    private val myArg by argument(help = "My argument description").optional()
-
-    override fun run() {
-        echo("My command executed with: ${myArg ?: "no argument"}")
-    }
-}
-```
-
-2. Register it in `Main.kt`:
-
-```kotlin
-fun main(args: Array<String>) = MckliCommand()
-    .subcommands(
-        HelloCommand(),
-        MyCommand()  // Add your command here
-    )
-    .main(args)
-```
-
-3. Clikt automatically provides help for your command:
-```bash
-./gradlew jvmRun --args="mycommand --help"
-```
-
-## Technology Stack
-
-| Component | Version |
-|-----------|---------|
-| **Kotlin** | 2.3.0 |
-| **Clikt** | 5.1.0 |
-| **Gradle** | 9.4.1 |
-| **Java** | 21+ |
-
-### Supported Platforms
-
-| Platform | JVM | Native Binary |
-|----------|-----|---------------|
-| macOS (Intel) | ✅ | ✅ |
-| macOS (Apple Silicon) | ✅ | ✅ |
-| Linux x64 | ✅ | ✅ |
-| Linux ARM64 | ✅ | ❌ (Kotlin limitation) |
-| Windows x64 | ✅ | ✅ |
-
-## Development
-
-### Available Gradle Tasks
+### Daemon won't start
 
 ```bash
-# Build all targets
-./gradlew build
+# Check logs
+cat ~/.config/mckli/daemons/<server>.log
+cat ~/.config/mckli/daemons/<server>.err
 
-# Run JVM version
-./gradlew jvmRun --args="[command]"
+# Clean up stale processes
+mckli daemon status
+mckli daemon stop <server> --force
+```
 
-# Build native binary (on supported platforms)
-./gradlew linkReleaseExecutableNative
+### Connection issues
 
-# Run tests
-./gradlew test
+```bash
+# Verify server configuration
+mckli config list
 
-# Check code quality
-./gradlew check
+# Test daemon connectivity
+mckli tools list <server>
 
-# Clean build artifacts
-./gradlew clean
+# Restart daemon
+mckli daemon restart <server>
+```
 
-# List all available tasks
-./gradlew tasks
+### Tool cache issues
+
+```bash
+# Refresh tool cache
+mckli tools refresh <server>
 ```
 
 ## License
@@ -216,4 +334,5 @@ See [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-This project follows the OpenSpec workflow for managing changes. See `openspec/changes/` for documentation on completed and in-progress changes.
+This project follows the OpenSpec workflow for managing changes. See `openspec/changes/mcp-server-wrapper/` for the
+current implementation documentation.

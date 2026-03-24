@@ -2,24 +2,27 @@ package com.mckli
 
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
-import com.mckli.commands.HelloCommand
+import com.mckli.config.ConfigCommand
+import com.mckli.daemon.DaemonCommand
+import com.mckli.tools.ToolsCommand
 
 /**
- * Application entry point
+ * MCP CLI Wrapper
  *
- * Initializes the CLI application with all available commands and
- * delegates argument parsing to Clikt.
+ * A wrapper around MCP (Model Context Protocol) servers that:
+ * - Maintains persistent HTTP connections through daemon processes
+ * - Caches tool metadata to reduce token usage
+ * - Exposes MCP tools as simple CLI commands for LLM integration
  *
- * Clikt automatically provides --help/-h flag for all commands.
- * No need for a custom help command!
- *
- * To add a new command:
- * 1. Create a new class extending CliktCommand in the commands package
- * 2. Add it to the subcommands list below
+ * Commands:
+ * - config: Manage MCP server configuration
+ * - daemon: Manage daemon processes
+ * - tools: Discover and invoke MCP tools
  */
 fun main(args: Array<String>) = MckliCommand()
     .subcommands(
-        HelloCommand()
-        // Add new commands here
+        ConfigCommand(),
+        DaemonCommand(),
+        ToolsCommand()
     )
     .main(args)
