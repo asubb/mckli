@@ -4,10 +4,9 @@ schema: spec-driven
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.
 # Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+ Tech stack: Kotlin Multiplatform targeting JVM and Native, gradle as a build tool
+ Domain: CLI utility
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
