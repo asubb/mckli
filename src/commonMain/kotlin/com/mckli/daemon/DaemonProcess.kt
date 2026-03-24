@@ -14,7 +14,18 @@ data class DaemonStatus(
     val serverName: String,
     val isRunning: Boolean,
     val pid: Int?,
-    val socketPath: String
+    val socketPath: String,
+    val connectionState: ConnectionState = ConnectionState.Unknown,
+    val lastError: String? = null
 )
+
+enum class ConnectionState {
+    Unknown,
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Failed
+}
 
 class DaemonException(message: String, cause: Throwable? = null) : Exception(message, cause)

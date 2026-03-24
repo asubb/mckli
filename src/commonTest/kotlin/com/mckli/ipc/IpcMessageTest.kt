@@ -24,7 +24,7 @@ class IpcMessageTest {
 
         assertTrue(decoded is IpcRequest.McpRequest)
         assertEquals("req-123", decoded.requestId)
-        assertEquals("tools/list", (decoded as IpcRequest.McpRequest).method)
+        assertEquals("tools/list", decoded.method)
     }
 
     @Test
@@ -39,7 +39,7 @@ class IpcMessageTest {
 
         assertTrue(decoded is IpcRequest.ListTools)
         assertEquals("req-456", decoded.requestId)
-        assertEquals("file", (decoded as IpcRequest.ListTools).filter)
+        assertEquals("file", decoded.filter)
     }
 
     @Test
@@ -53,7 +53,7 @@ class IpcMessageTest {
         val decoded = json.decodeFromString<IpcRequest>(jsonString)
 
         assertTrue(decoded is IpcRequest.DescribeTool)
-        assertEquals("read-file", (decoded as IpcRequest.DescribeTool).toolName)
+        assertEquals("read-file", decoded.toolName)
     }
 
     @Test
@@ -73,11 +73,10 @@ class IpcMessageTest {
         val decoded = json.decodeFromString<IpcRequest>(jsonString)
 
         assertTrue(decoded is IpcRequest.CallTool)
-        val callRequest = decoded as IpcRequest.CallTool
-        assertEquals("read-file", callRequest.toolName)
-        assertNotNull(callRequest.arguments)
+        assertEquals("read-file", decoded.toolName)
+        assertNotNull(decoded.arguments)
 
-        val decodedArgs = callRequest.arguments as JsonObject
+        val decodedArgs = decoded.arguments as JsonObject
         assertEquals("/tmp/file.txt", decodedArgs["path"]?.jsonPrimitive?.content)
     }
 
@@ -112,8 +111,7 @@ class IpcMessageTest {
         assertTrue(decoded is IpcResponse.Success)
         assertEquals("req-123", decoded.requestId)
 
-        val successResponse = decoded as IpcResponse.Success
-        val decodedResult = successResponse.result as JsonObject
+        val decodedResult = decoded.result as JsonObject
         assertEquals("file contents", decodedResult["content"]?.jsonPrimitive?.content)
         assertEquals(1234, decodedResult["size"]?.jsonPrimitive?.int)
     }
@@ -130,10 +128,9 @@ class IpcMessageTest {
         val decoded = json.decodeFromString<IpcResponse>(jsonString)
 
         assertTrue(decoded is IpcResponse.Error)
-        val errorResponse = decoded as IpcResponse.Error
-        assertEquals("req-456", errorResponse.requestId)
-        assertEquals("Tool not found", errorResponse.error)
-        assertEquals("Tool 'unknown-tool' does not exist", errorResponse.details)
+        assertEquals("req-456", decoded.requestId)
+        assertEquals("Tool not found", decoded.error)
+        assertEquals("Tool 'unknown-tool' does not exist", decoded.details)
     }
 
     @Test
@@ -148,13 +145,12 @@ class IpcMessageTest {
         val decoded = json.decodeFromString<IpcResponse>(jsonString)
 
         assertTrue(decoded is IpcResponse.Error)
-        val errorResponse = decoded as IpcResponse.Error
-        assertEquals("Internal error", errorResponse.error)
-        assertEquals(null, errorResponse.details)
+        assertEquals("Internal error", decoded.error)
+        assertEquals(null, decoded.details)
     }
 
     @Test
-    fun `Complex IpcRequest roundtrip preserves data`() {
+    fun `Complex IpcRequest round-trip preserves data`() {
         val original = IpcRequest.CallTool(
             requestId = "complex-123",
             toolName = "search",

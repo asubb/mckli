@@ -101,10 +101,9 @@ class McpRequestTest {
         assertNull(response.result)
         assertNotNull(response.error)
 
-        val error = response.error!!
-        assertEquals(-32600, error.code)
-        assertEquals("Invalid request", error.message)
-        assertNotNull(error.data)
+        assertEquals(-32600, response.error.code)
+        assertEquals("Invalid request", response.error.message)
+        assertNotNull(response.error.data)
     }
 
     @Test

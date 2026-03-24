@@ -109,6 +109,13 @@ class DaemonStatusCommand : CliktCommand(name = "status") {
 
             if (isRunning) {
                 echo("    Socket: ${daemon.getSocketPath()}")
+                echo("    Transport: ${serverConfig.transport}")
+
+                // Show connection state for SSE transport
+                if (serverConfig.transport == com.mckli.config.TransportType.SSE) {
+                    // Note: Connection state would need to be retrieved via IPC or status file
+                    echo("    SSE Connection: (check daemon logs for connection status)")
+                }
             }
         }
     }

@@ -245,10 +245,18 @@ Configuration stored in `~/.config/mckli/servers.json`:
     {
       "name": "myserver",
       "endpoint": "https://mcp.example.com/api",
+      "transport": "HTTP",
       "auth": {
         "type": "Bearer",
         "token": "..."
       },
+      "timeout": 30000,
+      "poolSize": 10
+    },
+    {
+      "name": "streaming-server",
+      "endpoint": "https://mcp.example.com/sse",
+      "transport": "SSE",
       "timeout": 30000,
       "poolSize": 10
     }
@@ -256,6 +264,20 @@ Configuration stored in `~/.config/mckli/servers.json`:
   "defaultServer": "myserver"
 }
 ```
+
+### Transport Types
+
+**HTTP (default)** - Standard request/response communication:
+- Simple POST requests with immediate responses
+- Best for most MCP servers
+- Lower overhead, predictable behavior
+
+**SSE (Server-Sent Events)** - Streaming communication:
+- Persistent connection with server-initiated messages
+- Automatic reconnection with exponential backoff
+- Supports real-time notifications from server
+- Client requests via POST, responses via SSE stream
+- Note: JVM platform only (not available on Native builds)
 
 Daemon state in `~/.config/mckli/daemons/`:
 
@@ -320,6 +342,31 @@ mckli tools list <server>
 # Restart daemon
 mckli daemon restart <server>
 ```
+
+### SSE Transport Issues
+
+**Connection not establishing:**
+- Check daemon logs for SSE connection errors
+- Verify server endpoint supports SSE (typically `/sse` or `/stream`)
+- Confirm server is accessible and responding
+- Check authentication credentials
+
+**Frequent reconnections:**
+- Server may be unstable or overloaded
+- Network issues between client and server
+- Check daemon logs for error patterns
+- Consider increasing timeout in configuration
+
+**"Max reconnection attempts exceeded":**
+- Server is down or unreachable
+- Configuration error (wrong endpoint, auth failure)
+- Stop and restart daemon after fixing server issues
+- Default: 10 retries with exponential backoff (1s to 30s)
+
+**SSE only available on JVM:**
+- Native builds don't support SSE transport yet
+- Use HTTP transport for native builds
+- Or use JVM version (`fatJar`) for SSE support
 
 ### Tool cache issues
 

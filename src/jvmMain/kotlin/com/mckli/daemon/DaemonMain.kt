@@ -1,10 +1,13 @@
 package com.mckli.daemon
 
 import com.mckli.config.ConfigManager
+import com.mckli.config.TransportType
 import com.mckli.http.ConnectionPool
 import com.mckli.ipc.UnixSocketServer
 import com.mckli.tools.ToolCache
-import kotlinx.coroutines.runBlocking
+import com.mckli.transport.SseTransport
+import com.mckli.transport.TransportFactory
+import kotlinx.coroutines.*
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -30,10 +33,18 @@ fun main(args: Array<String>) {
 
 class Daemon(private val serverName: String) {
     private val configManager = ConfigManager()
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private lateinit var connectionPool: ConnectionPool
     private lateinit var socketServer: UnixSocketServer
     private lateinit var toolCache: ToolCache
+    private var sseTransport: SseTransport? = null
     private var isShuttingDown = false
+
+    @Volatile
+    private var currentConnectionState = ConnectionState.Disconnected
+
+    @Volatile
+    private var lastError: String? = null
 
     init {
         // Register shutdown hook
@@ -60,6 +71,41 @@ class Daemon(private val serverName: String) {
 
         val serverConfig = config.servers.find { it.name == serverName }
             ?: throw DaemonException("Server '$serverName' not found in configuration")
+
+        // Initialize SSE transport if configured
+        if (serverConfig.transport == TransportType.SSE) {
+            println("Initializing SSE transport...")
+            val transport = TransportFactory.create(serverConfig) as SseTransport
+            sseTransport = transport
+
+            // Monitor connection state
+            scope.launch {
+                transport.connectionState.collect { state ->
+                    currentConnectionState = when (state) {
+                        is com.mckli.transport.SseConnectionState.Disconnected -> ConnectionState.Disconnected
+                        is com.mckli.transport.SseConnectionState.Connecting -> ConnectionState.Connecting
+                        is com.mckli.transport.SseConnectionState.Connected -> ConnectionState.Connected
+                        is com.mckli.transport.SseConnectionState.Reconnecting -> ConnectionState.Reconnecting
+                        is com.mckli.transport.SseConnectionState.Failed -> {
+                            lastError = state.error
+                            ConnectionState.Failed
+                        }
+                    }
+                    println("SSE connection state: $currentConnectionState")
+                }
+            }
+
+            // Establish connection
+            currentConnectionState = ConnectionState.Connecting
+            val connectResult = transport.connect()
+            if (connectResult.isFailure) {
+                lastError = connectResult.exceptionOrNull()?.message
+                currentConnectionState = ConnectionState.Failed
+                println("Warning: Failed to establish SSE connection: $lastError")
+            } else {
+                println("SSE connection established")
+            }
+        }
 
         // Initialize components
         connectionPool = ConnectionPool(serverConfig)
@@ -99,6 +145,9 @@ class Daemon(private val serverName: String) {
         println("Shutting down daemon...")
 
         try {
+            // Close SSE transport gracefully
+            sseTransport?.close()
+
             socketServer.stop()
             connectionPool.shutdown()
         } catch (e: Exception) {
@@ -107,5 +156,17 @@ class Daemon(private val serverName: String) {
 
         println("Daemon stopped")
         exitProcess(0)
+    }
+
+    fun getStatus(): DaemonStatus {
+        val daemonProcess = DaemonProcess(configManager.readConfig()!!.servers.first { it.name == serverName })
+        return DaemonStatus(
+            serverName = serverName,
+            isRunning = daemonProcess.isRunning(),
+            pid = daemonProcess.getPid(),
+            socketPath = daemonProcess.getSocketPath(),
+            connectionState = currentConnectionState,
+            lastError = lastError
+        )
     }
 }

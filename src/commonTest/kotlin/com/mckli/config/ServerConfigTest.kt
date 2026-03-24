@@ -68,7 +68,7 @@ class ServerConfigTest {
 
         assert(decoded.auth is AuthConfig.Basic)
         assertEquals("user", (decoded.auth as AuthConfig.Basic).username)
-        assertEquals("pass", (decoded.auth as AuthConfig.Basic).password)
+        assertEquals("pass", decoded.auth.password)
     }
 
     @Test
@@ -115,5 +115,48 @@ class ServerConfigTest {
         assertEquals(30000, config.timeout)
         assertEquals(10, config.poolSize)
         assertNull(config.auth)
+        assertEquals(TransportType.HTTP, config.transport)
+    }
+
+    @Test
+    fun `ServerConfig with SSE transport serializes correctly`() {
+        val config = ServerConfig(
+            name = "test",
+            endpoint = "https://example.com/sse",
+            transport = TransportType.SSE
+        )
+
+        val jsonString = json.encodeToString(ServerConfig.serializer(), config)
+        val decoded = json.decodeFromString<ServerConfig>(jsonString)
+
+        assertEquals(TransportType.SSE, decoded.transport)
+    }
+
+    @Test
+    fun `ServerConfig transport defaults to HTTP`() {
+        val jsonString = """
+            {
+              "name": "test",
+              "endpoint": "https://example.com/api"
+            }
+        """.trimIndent()
+
+        val config = json.decodeFromString(ServerConfig.serializer(), jsonString)
+
+        assertEquals(TransportType.HTTP, config.transport)
+    }
+
+    @Test
+    fun `ServerConfig with HTTP transport serializes correctly`() {
+        val config = ServerConfig(
+            name = "test",
+            endpoint = "https://example.com/api",
+            transport = TransportType.HTTP
+        )
+
+        val jsonString = json.encodeToString(ServerConfig.serializer(), config)
+        val decoded = json.decodeFromString<ServerConfig>(jsonString)
+
+        assertEquals(TransportType.HTTP, decoded.transport)
     }
 }
