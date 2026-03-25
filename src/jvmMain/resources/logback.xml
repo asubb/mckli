@@ -1,0 +1,37 @@
+<configuration>
+    <timestamp key="bySecond" datePattern="yyyy-MM-dd_HH-mm-ss"/>
+    
+    <appender name="DAEMON_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${MCKLI_LOG_DIR:-${user.home}/.config/mckli/daemons}/mckli-daemon-${bySecond}.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="CLI_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${MCKLI_LOG_DIR:-${user.home}/.config/mckli/logs}/mckli-run.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+    </appender>
+
+    <logger name="com.mckli.daemon" level="DEBUG" additivity="false">
+        <appender-ref ref="DAEMON_FILE" />
+        <appender-ref ref="STDOUT" />
+    </logger>
+
+    <root level="DEBUG">
+        <appender-ref ref="CLI_FILE" />
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>

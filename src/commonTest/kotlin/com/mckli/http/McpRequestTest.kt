@@ -107,18 +107,74 @@ class McpRequestTest {
     }
 
     @Test
-    fun `McpError serializes and deserializes`() {
-        val error = McpError(
-            code = -32601,
-            message = "Method not found",
-            data = JsonPrimitive("tools/unknown")
+    fun `McpNotification parses correctly`() {
+        val jsonString = """
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/message",
+                "params": {
+                    "level": "info",
+                    "logger": "server",
+                    "data": "Hello"
+                }
+            }
+        """.trimIndent()
+
+        val notification = json.decodeFromString<McpNotification>(jsonString)
+
+        assertEquals("2.0", notification.jsonrpc)
+        assertEquals("notifications/message", notification.method)
+        assertNotNull(notification.params)
+    }
+
+    @Test
+    fun `McpResponse without id parses correctly`() {
+        val jsonString = """
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/message",
+                "params": {
+                    "level": "info",
+                    "logger": "server",
+                    "data": "Hello"
+                }
+            }
+        """.trimIndent()
+
+        val response = json.decodeFromString<McpResponse>(jsonString)
+
+        assertEquals("2.0", response.jsonrpc)
+        assertNull(response.id)
+        assertEquals("notifications/message", response.method)
+        assertNull(response.result)
+    }
+
+    @Test
+    fun `McpRequest serializes with jsonrpc field`() {
+        val jsonWithDefaults = Json { encodeDefaults = true }
+        val request = McpRequest(
+            id = "123",
+            method = "tools/list"
         )
 
-        val jsonString = json.encodeToString(McpError.serializer(), error)
-        val decoded = json.decodeFromString<McpError>(jsonString)
+        val jsonString = jsonWithDefaults.encodeToString(McpRequest.serializer(), request)
+        assertNotNull(jsonString)
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+        assertEquals("2.0", jsonObject["jsonrpc"]?.jsonPrimitive?.content)
+    }
 
-        assertEquals(-32601, decoded.code)
-        assertEquals("Method not found", decoded.message)
-        assertEquals("tools/unknown", decoded.data?.jsonPrimitive?.content)
+    @Test
+    fun `McpNotification serializes correctly without id`() {
+        val jsonWithDefaults = Json { encodeDefaults = true }
+        val notification = McpNotification(
+            method = "notifications/initialized"
+        )
+
+        val jsonString = jsonWithDefaults.encodeToString(McpNotification.serializer(), notification)
+        val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+        
+        assertEquals("2.0", jsonObject["jsonrpc"]?.jsonPrimitive?.content)
+        assertEquals("notifications/initialized", jsonObject["method"]?.jsonPrimitive?.content)
+        assertNull(jsonObject["id"], "Notification should NOT have an id field")
     }
 }

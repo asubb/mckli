@@ -3,6 +3,7 @@ package com.mckli.transport
 import com.mckli.config.AuthConfig
 import com.mckli.config.ServerConfig
 import com.mckli.http.*
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -12,20 +13,26 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
+
+private val logger = KotlinLogging.logger {}
 
 class HttpTransport(private val config: ServerConfig) : McpTransport {
     private val client: HttpClient
+    private val json = Json {
+        prettyPrint = false
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
+    private var isInitialized = false
 
     init {
         client = HttpClient(CIO) {
             install(ContentNegotiation) {
-                json(Json {
-                    prettyPrint = false
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                })
+                json(json)
             }
 
             install(HttpTimeout) {
@@ -61,18 +68,76 @@ class HttpTransport(private val config: ServerConfig) : McpTransport {
         }
     }
 
+    private suspend fun performInitialization(): Result<Unit> {
+        if (isInitialized) return Result.success(Unit)
+
+        logger.debug { "Initializing HTTP transport for ${config.name}" }
+        val initRequest = McpRequest(
+            id = "init-${Clock.System.now().toEpochMilliseconds()}",
+            method = "initialize",
+            params = json.encodeToJsonElement(
+                McpInitializeParams.serializer(),
+                McpInitializeParams(
+                    protocolVersion = "2024-11-05",
+                    clientInfo = McpClientInfo(name = "mckli-daemon", version = "1.0.0")
+                )
+            )
+        )
+
+        return sendRequest(initRequest).fold(
+            onSuccess = { response ->
+                isInitialized = true
+                logger.debug { "HTTP transport initialized successfully for ${config.name}" }
+
+                // Send initialized notification (optional for HTTP as it's stateless, but good for compliance)
+                val notification = McpNotification(
+                    method = "notifications/initialized",
+                    params = null
+                )
+                // We don't wait for notification result
+                @OptIn(DelicateCoroutinesApi::class)
+                GlobalScope.launch {
+                    try {
+                        client.post(config.endpoint) {
+                            contentType(ContentType.Application.Json)
+                            setBody(notification)
+                        }
+                    } catch (e: Exception) {
+                        // Ignore notification failures
+                    }
+                }
+
+                Result.success(Unit)
+            },
+            onFailure = { error ->
+                Result.failure(error)
+            }
+        )
+    }
+
     override suspend fun sendRequest(request: McpRequest): Result<McpResponse> {
+        if (!isInitialized && request.method != "initialize") {
+            val initResult = performInitialization()
+            if (initResult.isFailure) {
+                return Result.failure(initResult.exceptionOrNull()!!)
+            }
+        }
+
         return try {
+            logger.debug { "Sending MCP request via HTTP to ${config.endpoint}: ${request.method} (id=${request.id})" }
             withTimeout(config.timeout) {
                 val response: HttpResponse = client.post(config.endpoint) {
                     contentType(ContentType.Application.Json)
                     setBody(request)
                 }
 
+                logger.debug { "Received HTTP response: ${response.status} for ${request.method} (id=${request.id})" }
+
                 when {
                     response.status.isSuccess() -> {
                         val mcpResponse = response.body<McpResponse>()
                         if (mcpResponse.error != null) {
+                            logger.debug { "MCP response contains error: ${mcpResponse.error.message}" }
                             Result.failure(McpException("MCP error: ${mcpResponse.error.message}", mcpResponse.error))
                         } else {
                             Result.success(mcpResponse)

@@ -7,17 +7,22 @@ import com.mckli.ipc.UnixSocketServer
 import com.mckli.tools.ToolCache
 import com.mckli.transport.SseTransport
 import com.mckli.transport.TransportFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import java.io.File
 import kotlin.system.exitProcess
 
+private val logger = KotlinLogging.logger {}
+
 fun main(args: Array<String>) {
+    // Daemon uses its own logger with specific appender in logback.xml
     if (args.isEmpty()) {
         System.err.println("Usage: DaemonMain <server-name>")
         exitProcess(1)
     }
 
     val serverName = args[0]
+    logger.debug { "Daemon entry point hit with serverName: $serverName" }
 
     runBlocking {
         try {
@@ -26,6 +31,7 @@ fun main(args: Array<String>) {
         } catch (e: Exception) {
             System.err.println("Daemon error: ${e.message}")
             e.printStackTrace()
+            logger.error(e) { "Daemon execution failed" }
             exitProcess(1)
         }
     }
@@ -47,25 +53,34 @@ class Daemon(private val serverName: String) {
     private var lastError: String? = null
 
     init {
+        logger.debug { "Initializing Daemon for server: $serverName" }
         // Register shutdown hook
         Runtime.getRuntime().addShutdownHook(Thread {
             runBlocking {
+                logger.debug { "Shutdown hook triggered" }
                 shutdown()
             }
         })
 
         // Handle SIGTERM gracefully
-        sun.misc.Signal.handle(sun.misc.Signal("TERM")) {
-            runBlocking {
-                shutdown()
+        try {
+            sun.misc.Signal.handle(sun.misc.Signal("TERM")) {
+                runBlocking {
+                    logger.debug { "SIGTERM signal received" }
+                    shutdown()
+                }
             }
+        } catch (e: Exception) {
+            logger.warn { "Failed to register SIGTERM handler: ${e.message}" }
         }
     }
 
     suspend fun start() {
         println("Starting daemon for server: $serverName")
+        logger.info { "Daemon starting for server: $serverName" }
 
         // Load configuration
+        logger.debug { "Loading configuration..." }
         val config = configManager.readConfig()
             ?: throw DaemonException("No configuration found")
 
@@ -75,6 +90,7 @@ class Daemon(private val serverName: String) {
         // Initialize SSE transport if configured
         if (serverConfig.transport == TransportType.SSE) {
             println("Initializing SSE transport...")
+            logger.debug { "Initializing SSE transport for server: $serverName" }
             val transport = TransportFactory.create(serverConfig) as SseTransport
             sseTransport = transport
 
@@ -92,23 +108,28 @@ class Daemon(private val serverName: String) {
                         }
                     }
                     println("SSE connection state: $currentConnectionState")
+                    logger.debug { "SSE connection state updated: $currentConnectionState" }
                 }
             }
 
             // Establish connection
             currentConnectionState = ConnectionState.Connecting
+            logger.debug { "Connecting to SSE endpoint: ${serverConfig.endpoint}" }
             val connectResult = transport.connect()
             if (connectResult.isFailure) {
                 lastError = connectResult.exceptionOrNull()?.message
                 currentConnectionState = ConnectionState.Failed
                 println("Warning: Failed to establish SSE connection: $lastError")
+                logger.warn { "Failed to establish SSE connection: $lastError" }
             } else {
                 println("SSE connection established")
+                logger.debug { "SSE connection established successfully" }
             }
         }
 
         // Initialize components
-        connectionPool = ConnectionPool(serverConfig)
+        logger.debug { "Initializing connection pool and tool cache" }
+        connectionPool = ConnectionPool(serverConfig, sseTransport)
         toolCache = ToolCache(connectionPool)
 
         // Get socket path
@@ -116,21 +137,28 @@ class Daemon(private val serverName: String) {
         val socketPath = daemonProcess.getSocketPath()
 
         // Clean up old socket if exists
+        logger.debug { "Ensuring socket path is clear: $socketPath" }
         File(socketPath).delete()
 
         // Start Unix socket server
+        logger.debug { "Starting Unix socket server at $socketPath" }
         socketServer = UnixSocketServer(socketPath, connectionPool, toolCache)
         socketServer.start()
 
         // Fetch tools on startup
         try {
+            logger.debug { "Refreshing tool cache on startup" }
             toolCache.refresh()
-            println("Loaded ${toolCache.getToolCount()} tools from MCP server")
+            val count = toolCache.getToolCount()
+            println("Loaded $count tools from MCP server")
+            logger.debug { "Loaded $count tools" }
         } catch (e: Exception) {
             System.err.println("Warning: Failed to load tools: ${e.message}")
+            logger.warn(e) { "Failed to load tools: ${e.message}" }
         }
 
         println("Daemon ready on socket: $socketPath")
+        logger.info { "Daemon ready on socket: $socketPath" }
 
         // Keep daemon alive
         while (!isShuttingDown) {
@@ -143,18 +171,25 @@ class Daemon(private val serverName: String) {
         isShuttingDown = true
 
         println("Shutting down daemon...")
+        logger.info { "Shutting down daemon..." }
 
         try {
             // Close SSE transport gracefully
+            logger.debug { "Closing SSE transport" }
             sseTransport?.close()
 
+            logger.debug { "Stopping Unix socket server" }
             socketServer.stop()
+
+            logger.debug { "Shutting down connection pool" }
             connectionPool.shutdown()
         } catch (e: Exception) {
             System.err.println("Error during shutdown: ${e.message}")
+            logger.error(e) { "Error during shutdown: ${e.message}" }
         }
 
         println("Daemon stopped")
+        logger.info { "Daemon stopped" }
         exitProcess(0)
     }
 

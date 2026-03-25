@@ -39,10 +39,12 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             val processBuilder = ProcessBuilder(
                 javaBin,
                 "-cp", classpath,
+                "-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}",
                 "com.mckli.daemon.DaemonMainKt",
                 config.name
             )
 
+            // Keep existing redirection for stdout/stderr as fallback/main output
             processBuilder.redirectOutput(File(daemonsDir, "${config.name}.log"))
             processBuilder.redirectError(File(daemonsDir, "${config.name}.err"))
 

@@ -29,3 +29,15 @@ Feature: SSE Transport
     When I stop the daemon for SSE server "sseserver"
     Then the SSE connection should be closed gracefully
     And the SSE daemon for "sseserver" should not be running
+
+  @requires-sse-server
+  Scenario: Tool discovery works over SSE transport
+    Given a server "sseserver" with SSE transport
+    And the SSE server provides a dynamic POST endpoint "/messages/?session_id=123"
+    And the SSE server has tools:
+      | name      | description    |
+      | sse-tool  | SSE tool       |
+    When I start the daemon for SSE server "sseserver"
+    And I list tools from SSE server "sseserver"
+    Then I should see tool "sse-tool" from SSE server
+    And the request should have been sent to the dynamic endpoint "/messages/?session_id=123"

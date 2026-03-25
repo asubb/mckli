@@ -6,6 +6,8 @@ import com.mckli.http.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -17,6 +19,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 class SseTransport(private val config: ServerConfig) : McpTransport {
     private val client: HttpClient
@@ -24,6 +29,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
         prettyPrint = false
         ignoreUnknownKeys = true
         isLenient = true
+        encodeDefaults = true
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -37,18 +43,26 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
     private val _connectionState = MutableStateFlow<SseConnectionState>(SseConnectionState.Disconnected)
     val connectionState: StateFlow<SseConnectionState> = _connectionState
 
+    // Dynamic POST endpoint received from SSE
+    private var postEndpoint = config.endpoint
+
     // Reconnection strategy
     private val reconnectionStrategy = ReconnectionStrategy()
 
     private var sseJob: Job? = null
     private var shouldReconnect = AtomicBoolean(true)
 
+    private val isInitialized = AtomicBoolean(false)
+
     init {
         client = HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json(json)
+            }
             install(HttpTimeout) {
-                requestTimeoutMillis = config.timeout
+                requestTimeoutMillis = null // Disable request timeout for SSE
                 connectTimeoutMillis = config.timeout
-                socketTimeoutMillis = Long.MAX_VALUE // SSE connections are long-lived
+                socketTimeoutMillis = Long.MAX_VALUE // Keep-alive handled by server/client
             }
 
             engine {
@@ -77,6 +91,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
         return try {
             _connectionState.value = SseConnectionState.Connecting
+            logger.debug { "Connecting to SSE endpoint: ${config.endpoint}" }
 
             sseJob = scope.launch {
                 while (shouldReconnect.get() && !isClosed.get()) {
@@ -101,12 +116,16 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                             }
                         }.execute { response ->
                             if (!response.status.isSuccess()) {
+                                logger.error { "SSE connection failed with status: ${response.status}" }
                                 throw Exception("SSE connection failed: ${response.status}")
                             }
 
                             isConnected.set(true)
+                            isInitialized.set(false) // Reset initialization state on new connection
                             _connectionState.value = SseConnectionState.Connected
                             reconnectionStrategy.reset() // Successful connection, reset backoff
+                            postEndpoint = config.endpoint // Reset to base endpoint on new connection
+                            logger.info { "SSE connection established" }
 
                             // Read SSE stream
                             val channel = response.bodyAsChannel()
@@ -114,6 +133,10 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                         }
                     } catch (e: Exception) {
                         isConnected.set(false)
+                        if (isClosed.get()) {
+                            logger.debug { "SSE connection closed during read" }
+                            return@launch
+                        }
 
                         // Fail all pending requests
                         pendingRequests.values.forEach { deferred ->
@@ -125,15 +148,18 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                         if (shouldReconnect.get() && !isClosed.get()) {
                             _connectionState.value = SseConnectionState.Reconnecting
 
-                            val delay = reconnectionStrategy.recordAttempt()
-                            if (delay == null) {
+                            val delayMs = reconnectionStrategy.getNextDelay()
+                            if (delayMs == null) {
                                 // Max retries exceeded
+                                logger.error(e) { "Max SSE reconnection attempts exceeded" }
                                 _connectionState.value = SseConnectionState.Failed("Max reconnection attempts exceeded")
                                 shouldReconnect.set(false)
                                 break
                             }
 
-                            println("SSE connection lost. Reconnecting in ${delay}ms (attempt ${reconnectionStrategy.getAttemptCount()})...")
+                            val currentAttempt = reconnectionStrategy.getAttemptCount() + 1
+                            logger.warn(e) { "SSE connection lost. Reconnecting in ${delayMs}ms (attempt $currentAttempt)..." }
+                            reconnectionStrategy.recordAttempt()
                         }
                     }
                 }
@@ -167,10 +193,12 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
     private suspend fun readSseStream(channel: ByteReadChannel) {
         val buffer = StringBuilder()
+        var currentEvent: String? = null
 
         try {
             while (!channel.isClosedForRead && !isClosed.get()) {
                 val line = channel.readUTF8Line() ?: break
+                logger.debug { "Read SSE stream line: $line" }
 
                 // SSE format: each line is either empty (end of event) or field:value
                 if (line.isEmpty()) {
@@ -180,9 +208,10 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                         buffer.clear()
 
                         if (eventData.isNotEmpty()) {
-                            handleSseEvent(eventData)
+                            handleSseEvent(currentEvent, eventData)
                         }
                     }
+                    currentEvent = null // Reset event for next block
                 } else if (line.startsWith(":")) {
                     // Comment line, ignore
                     continue
@@ -193,8 +222,11 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                         buffer.append("\n")
                     }
                     buffer.append(data)
+                } else if (line.startsWith("event:")) {
+                    // Event type
+                    currentEvent = line.substring(6).trim()
                 } else if (line.contains(":")) {
-                    // Other field types (event, id, retry) - ignore for now
+                    // Other field types (id, retry) - ignore for now
                     continue
                 }
             }
@@ -205,35 +237,97 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
         }
     }
 
-    private suspend fun handleSseEvent(data: String) {
+    private fun handleSseEvent(event: String?, data: String) {
+        // Handle "endpoint" event specifically
+        if (event == "endpoint") {
+            try {
+                // If it's a relative path, resolve it against the base URL
+                val newEndpoint = if (data.startsWith("/")) {
+                    val host = config.endpoint.substringBefore("://") + "://" + config.endpoint.substringAfter("://").substringBefore("/")
+                    host + data
+                } else {
+                    data
+                }
+                logger.info { "Updated POST endpoint from SSE: $newEndpoint" }
+                postEndpoint = newEndpoint
+                return
+            } catch (e: Exception) {
+                logger.error(e) { "Failed to parse endpoint from SSE event: $data" }
+            }
+        }
+
         try {
             // Parse MCP response from event data
             val mcpResponse = try {
                 json.decodeFromString<McpResponse>(data)
             } catch (e: Exception) {
                 // Log malformed event but continue processing
-                println("Warning: Malformed SSE event data: ${e.message}")
+                logger.warn(e) { "Malformed SSE event data: $data (event: $event)" }
                 return
             }
 
             // Check if this is a response to a pending request
-            val deferred = pendingRequests.remove(mcpResponse.id)
-            if (deferred != null) {
-                // Response to a client request
-                deferred.complete(mcpResponse)
+            val id = mcpResponse.id
+            if (id != null) {
+                val deferred = pendingRequests.remove(id)
+                if (deferred != null) {
+                    // Response to a client request
+                    deferred.complete(mcpResponse)
+                } else {
+                    // Server-initiated event with ID (might be a request from server, not yet supported)
+                    handleServerInitiatedEvent(mcpResponse)
+                }
             } else {
-                // Server-initiated event (no matching request)
+                // Server-initiated notification (no ID)
                 handleServerInitiatedEvent(mcpResponse)
             }
         } catch (e: Exception) {
-            println("Error handling SSE event: ${e.message}")
+            logger.error(e) { "Error handling SSE event: ${e.message}" }
         }
     }
 
     private fun handleServerInitiatedEvent(response: McpResponse) {
-        // Log server-initiated notifications
-        println("Server notification received: id=${response.id}, method=${response.result}")
+        logger.debug { "Server notification received: id=${response.id}, method=${response.method ?: response.result}" }
         // TODO: Make available for monitoring/debugging
+    }
+
+    private suspend fun performInitialization(): Result<Unit> {
+        if (isInitialized.get()) return Result.success(Unit)
+
+        logger.info { "Performing MCP initialization handshake" }
+        val initRequest = McpRequest(
+            id = "init-${System.currentTimeMillis()}",
+            method = "initialize",
+            params = json.encodeToJsonElement(
+                McpInitializeParams.serializer(),
+                McpInitializeParams(
+                    protocolVersion = "2024-11-05",
+                    clientInfo = McpClientInfo(name = "mckli-daemon", version = "1.0.0")
+                )
+            )
+        )
+
+        return sendRequest(initRequest).fold(
+            onSuccess = { response ->
+                logger.info { "MCP initialization successful" }
+                isInitialized.set(true)
+
+                // Send initialized notification
+                scope.launch {
+                    val notification = McpNotification(
+                        method = "notifications/initialized",
+                        params = null
+                    )
+                    sendPostRequest(notification)
+                }
+
+                Result.success(Unit)
+            },
+            onFailure = { error ->
+                logger.error(error) { "MCP initialization failed" }
+                Result.failure(error)
+            }
+        )
     }
 
     override suspend fun sendRequest(request: McpRequest): Result<McpResponse> {
@@ -243,6 +337,14 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
         if (isClosed.get()) {
             return Result.failure(IllegalStateException("Transport is closed"))
+        }
+
+        // Perform initialization if needed
+        if (!isInitialized.get() && request.method != "initialize") {
+            val initResult = performInitialization()
+            if (initResult.isFailure) {
+                return Result.failure(initResult.exceptionOrNull()!!)
+            }
         }
 
         return try {
@@ -283,11 +385,12 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
         }
     }
 
-    private suspend fun sendPostRequest(request: McpRequest): Result<Unit> {
+    private suspend fun sendPostRequest(message: McpMessage): Result<Unit> {
         return try {
-            val response = client.post(config.endpoint) {
+            val response = client.post(postEndpoint) {
+                logger.debug { "Sending POST request to: $postEndpoint" }
                 contentType(ContentType.Application.Json)
-                setBody(request)
+                setBody(message)
 
                 // Add authentication headers
                 config.auth?.let { auth ->

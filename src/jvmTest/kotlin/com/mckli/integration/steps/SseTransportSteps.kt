@@ -1,13 +1,16 @@
 package com.mckli.integration.steps
 
 import com.mckli.config.Configuration
+import com.mckli.client.RequestRouter
 import com.mckli.config.ConfigManager
 import com.mckli.config.ServerConfig
 import com.mckli.config.TransportType.SSE
 import com.mckli.daemon.DaemonProcess
 import com.mckli.integration.support.MockSseServer
 import com.mckli.transport.SseTransport
+import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
+import kotlinx.serialization.json.*
 import java.io.File
 import kotlin.test.*
 
@@ -22,6 +25,7 @@ class SseTransportSteps : En {
     private var reconnectionAttempted = false
     private lateinit var configManager: ConfigManager
     private lateinit var testConfigDir: File
+    private var sseToolList: JsonElement? = null
 
     init {
         Before { ->
@@ -125,6 +129,49 @@ class SseTransportSteps : En {
             val result = daemon.start()
             assertTrue(result.isSuccess, "Failed to start daemon: ${result.exceptionOrNull()?.message}")
             Thread.sleep(1000) // Give daemon time to initialize
+        }
+
+        Given("the SSE server provides a dynamic POST endpoint {string}") { endpoint: String ->
+            mockServer.sendEvent(MockSseServer.SseEvent(
+                event = "endpoint",
+                data = endpoint
+            ))
+            // Give some time for the client to receive the event
+            Thread.sleep(200)
+        }
+
+        Given("the SSE server has tools:") { dataTable: DataTable ->
+            val tools = dataTable.asMaps()
+            tools.forEach { row ->
+                mockServer.addTool(
+                    name = row["name"]!!,
+                    description = row["description"]
+                )
+            }
+        }
+
+        When("I list tools from SSE server {string}") { serverName: String ->
+            val router = RequestRouter(serverName)
+            val result = router.listTools(null)
+            if (result.isFailure) {
+                println("ERROR: Listing tools failed: ${result.exceptionOrNull()}")
+            }
+            assertTrue(result.isSuccess, "Listing tools should succeed, but got: ${result.exceptionOrNull()}")
+            sseToolList = result.getOrNull()
+        }
+
+        Then("I should see tool {string} from SSE server") { toolName: String ->
+            assertNotNull(sseToolList, "Tool list should not be null")
+            val toolList = sseToolList?.jsonArray
+            assertNotNull(toolList, "Tool list should be an array")
+            val toolFound = toolList.any { it.jsonObject["name"]?.jsonPrimitive?.content == toolName }
+            assertTrue(toolFound, "Tool $toolName not found in $sseToolList")
+        }
+
+        Then("the request should have been sent to the dynamic endpoint {string}") { endpoint: String ->
+            // Use contains to match paths like /messages/?session_id=123
+            val count = mockServer.getRequestCount(endpoint)
+            assertTrue(count > 0, "Request should have been sent to $endpoint, but count was $count")
         }
 
         Then("SSE connection should be established") {

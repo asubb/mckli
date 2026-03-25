@@ -137,4 +137,23 @@ class ToolMetadataTest {
         assertNull(metadata.description)
         assertNull(metadata.inputSchema)
     }
+    
+    @Test
+    fun `ToolMetadata ignores unknown keys`() {
+        val jsonString = """
+            {
+                "name": "unknown-keys-tool",
+                "description": "Tool with unknown keys",
+                "title": "Display Title",
+                "extra": {
+                    "key": "value"
+                }
+            }
+        """.trimIndent()
+
+        val metadata = json.decodeFromString<ToolMetadata>(jsonString)
+
+        assertEquals("unknown-keys-tool", metadata.name)
+        assertEquals("Tool with unknown keys", metadata.description)
+    }
 }

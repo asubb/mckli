@@ -1,5 +1,5 @@
 package com.mckli.daemon
-
+ 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
@@ -8,7 +8,10 @@ import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.mckli.config.ConfigManager
 import com.mckli.config.Configuration
-
+import io.github.oshai.kotlinlogging.KotlinLogging
+ 
+private val logger = KotlinLogging.logger {}
+ 
 class DaemonCommand : CliktCommand(name = "daemon") {
     override fun help(context: Context) = "Manage MCP server daemons"
     init {
@@ -25,10 +28,11 @@ class DaemonCommand : CliktCommand(name = "daemon") {
 
 class DaemonStartCommand : CliktCommand(name = "start") {
     override fun help(context: Context) = "Start a daemon for an MCP server"
-
+ 
     private val serverName by argument(help = "Server name")
-
+ 
     override fun run() {
+        logger.info { "Starting daemon for server: $serverName" }
         val configManager = ConfigManager()
         val config = configManager.readConfig() ?: run {
             echo("No configuration found. Use 'config add' to add a server.", err = true)
@@ -57,11 +61,12 @@ class DaemonStartCommand : CliktCommand(name = "start") {
 
 class DaemonStopCommand : CliktCommand(name = "stop") {
     override fun help(context: Context) = "Stop a daemon"
-
+ 
     private val serverName by argument(help = "Server name")
     private val force by option("--force", "-f", help = "Force kill daemon").flag(default = false)
-
+ 
     override fun run() {
+        logger.info { "Stopping daemon for server: $serverName (force=$force)" }
         val configManager = ConfigManager()
         val config = configManager.readConfig() ?: run {
             echo("No configuration found", err = true)
@@ -88,8 +93,9 @@ class DaemonStopCommand : CliktCommand(name = "stop") {
 
 class DaemonStatusCommand : CliktCommand(name = "status") {
     override fun help(context: Context) = "Show status of all daemons"
-
+ 
     override fun run() {
+        logger.info { "Checking status of all daemons" }
         val configManager = ConfigManager()
         val config = configManager.readConfig()
 
@@ -123,10 +129,11 @@ class DaemonStatusCommand : CliktCommand(name = "status") {
 
 class DaemonRestartCommand : CliktCommand(name = "restart") {
     override fun help(context: Context) = "Restart a daemon"
-
+ 
     private val serverName by argument(help = "Server name")
-
+ 
     override fun run() {
+        logger.info { "Restarting daemon for server: $serverName" }
         val configManager = ConfigManager()
         val config = configManager.readConfig() ?: run {
             echo("No configuration found", err = true)

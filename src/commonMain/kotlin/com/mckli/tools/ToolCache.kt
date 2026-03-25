@@ -2,11 +2,19 @@ package com.mckli.tools
 
 import com.mckli.http.ConnectionPool
 import com.mckli.http.McpRequest
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 
+private val logger = KotlinLogging.logger {}
+
 class ToolCache(private val connectionPool: ConnectionPool) {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
     private val mutex = Mutex()
     private val tools = mutableMapOf<String, ToolMetadata>()
 
@@ -17,12 +25,12 @@ class ToolCache(private val connectionPool: ConnectionPool) {
             params = null
         )
 
-        connectionPool.executeRequest { client ->
-            client.sendRequest(request).fold(
+        connectionPool.executeRequest { transport ->
+            transport.sendRequest(request).fold(
                 onSuccess = { response ->
                     response.result?.let { result ->
                         try {
-                            val toolList = Json.decodeFromJsonElement<ToolList>(result)
+                            val toolList = json.decodeFromJsonElement<ToolList>(result)
                             mutex.withLock {
                                 tools.clear()
                                 toolList.tools.forEach { tool ->
@@ -30,6 +38,7 @@ class ToolCache(private val connectionPool: ConnectionPool) {
                                 }
                             }
                         } catch (e: Exception) {
+                            logger.error(e) { "Failed to parse tool list: ${e.message}. Raw JSON: $result" }
                             throw ToolCacheException("Failed to parse tool list: ${e.message}", e)
                         }
                     }
@@ -85,8 +94,8 @@ class ToolCache(private val connectionPool: ConnectionPool) {
             }
         )
 
-        return pool.executeRequest { client ->
-            client.sendRequest(request).fold(
+        return pool.executeRequest { transport ->
+            transport.sendRequest(request).fold(
                 onSuccess = { response ->
                     response.result?.let { Result.success(it) }
                         ?: Result.failure(ToolCacheException("No result from tool call"))

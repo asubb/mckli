@@ -1,6 +1,9 @@
 package com.mckli.http
 
 import com.mckli.config.ServerConfig
+import com.mckli.transport.McpTransport
+import com.mckli.transport.TransportFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
@@ -9,48 +12,62 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.milliseconds
 
+private val logger = KotlinLogging.logger {}
+
 /**
- * Connection pool wrapper that manages HttpMcpClient lifecycle and metrics.
- * The actual HTTP connection pooling is handled by Ktor's CIO engine.
+ * Connection pool wrapper that manages McpTransport lifecycle and metrics.
+ * For HTTP transport, the actual HTTP connection pooling is handled by Ktor's CIO engine.
+ * For SSE transport, a single persistent connection is used.
  */
 class ConnectionPool(
     private val config: ServerConfig,
+    private val providedTransport: McpTransport? = null,
     private val idleTimeout: Duration = 5.minutes,
     private val maxLifetime: Duration = 30.minutes
 ) {
     private val mutex = Mutex()
-    private var client: HttpMcpClient? = null
-    private var clientCreatedAt: Instant? = null
-    private var lastUsedAt: Instant? = null
-    private var totalCreated = 0
+    private var transport: McpTransport? = providedTransport
+    private var transportCreatedAt: Instant? = Clock.System.now()
+    private var lastUsedAt: Instant? = Clock.System.now()
+    private var totalCreated = if (providedTransport != null) 1 else 0
     private var activeRequests = 0
 
     private val metrics = PoolMetrics()
 
-    suspend fun <T> executeRequest(block: suspend (HttpMcpClient) -> T): T {
-        val currentClient = mutex.withLock {
+    suspend fun <T> executeRequest(block: suspend (McpTransport) -> T): T {
+        val currentTransport = mutex.withLock {
             activeRequests++
             val now = Clock.System.now()
 
-            // Check if we need to create or recreate the client
-            val needsRecreation = client == null ||
-                (clientCreatedAt?.let { (now - it) > maxLifetime } == true) ||
+            // For provided transport (like SSE), we don't recreate it based on time
+            if (providedTransport != null) {
+                logger.debug { "Using provided transport for ${config.name}" }
+                lastUsedAt = now
+                return@withLock providedTransport
+            }
+
+            // Check if we need to create or recreate the transport
+            val needsRecreation = transport == null ||
+                (transportCreatedAt?.let { (now - it) > maxLifetime } == true) ||
                 (lastUsedAt?.let { (now - it) > idleTimeout } == true)
 
             if (needsRecreation) {
-                client?.close()
-                client = HttpMcpClient(config)
-                clientCreatedAt = now
+                logger.debug { "Recreating transport for ${config.name} (reason: ${if (transport == null) "first use" else "expired/idle"})" }
+                transport?.close()
+                transport = TransportFactory.create(config)
+                transportCreatedAt = now
                 totalCreated++
                 metrics.totalCreated = totalCreated
+            } else {
+                logger.debug { "Reusing existing transport for ${config.name}" }
             }
 
             lastUsedAt = now
-            client!!
+            transport!!
         }
 
         return try {
-            block(currentClient)
+            block(currentTransport)
         } finally {
             mutex.withLock {
                 activeRequests--
@@ -62,8 +79,8 @@ class ConnectionPool(
     suspend fun getMetrics(): PoolMetrics {
         return mutex.withLock {
             metrics.copy(
-                isActive = client != null,
-                idleConnections = if (client != null && activeRequests == 0) 1 else 0
+                isActive = transport != null,
+                idleConnections = if (transport != null && activeRequests == 0) 1 else 0
             )
         }
     }
@@ -78,9 +95,12 @@ class ConnectionPool(
 
     suspend fun shutdown() {
         mutex.withLock {
-            client?.close()
-            client = null
-            clientCreatedAt = null
+            // Only close it if it was NOT provided from outside
+            if (providedTransport == null) {
+                transport?.close()
+            }
+            transport = null
+            transportCreatedAt = null
             lastUsedAt = null
             activeRequests = 0
         }
@@ -88,9 +108,11 @@ class ConnectionPool(
 
     suspend fun forceShutdown() {
         mutex.withLock {
-            client?.close()
-            client = null
-            clientCreatedAt = null
+            if (providedTransport == null) {
+                transport?.close()
+            }
+            transport = null
+            transportCreatedAt = null
             lastUsedAt = null
             activeRequests = 0
         }

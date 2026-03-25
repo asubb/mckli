@@ -3,6 +3,8 @@ package com.mckli.integration.support
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -23,6 +25,16 @@ class MockSseServer(private val port: Int = 8081) {
     private var channelIdCounter = 0
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val pendingRequests = ConcurrentHashMap<String, JsonObject>()
+    private val initializedSessions = mutableSetOf<String>()
+    private var sessionEndpoint: String? = null
+    private val requestCount = ConcurrentHashMap<String, Int>()
+    private val tools = mutableListOf<MockTool>()
+
+    data class MockTool(
+        val name: String,
+        val description: String?,
+        val inputSchema: JsonObject? = null
+    )
 
     data class SseEvent(
         val id: String? = null,
@@ -31,8 +43,17 @@ class MockSseServer(private val port: Int = 8081) {
         val retry: Int? = null
     )
 
+    fun setSessionEndpoint(endpoint: String?) {
+        sessionEndpoint = endpoint
+    }
+
+    fun getRequestCount(path: String): Int = requestCount.getOrDefault(path, 0)
+
     fun start() {
         server = embeddedServer(Netty, port = port) {
+            install(ContentNegotiation) {
+                json()
+            }
             routing {
                 // SSE endpoint for receiving events
                 get("/sse") {
@@ -49,6 +70,12 @@ class MockSseServer(private val port: Int = 8081) {
                         call.response.cacheControl(CacheControl.NoCache(null))
                         call.response.header(HttpHeaders.ContentType, "text/event-stream")
                         call.response.header(HttpHeaders.Connection, "keep-alive")
+
+                        // If session endpoint is configured, send it immediately
+                        sessionEndpoint?.let { endpoint ->
+                            sendEvent(SseEvent(event = "endpoint", data = endpoint))
+                        }
+
                         call.respondTextWriter(contentType = ContentType.Text.EventStream) {
                             // Keep connection alive and send events
                             try {
@@ -76,62 +103,93 @@ class MockSseServer(private val port: Int = 8081) {
 
                 // POST endpoint for receiving client requests
                 post("/sse") {
-                    if (!isResponding.get()) {
-                        call.respond(HttpStatusCode.ServiceUnavailable)
-                        return@post
-                    }
+                    requestCount["/sse"] = requestCount.getOrDefault("/sse", 0) + 1
+                    handlePostRequest(call)
+                }
 
-                    try {
-                        val request = call.receive<JsonObject>()
-                        val id = request["id"]?.jsonPrimitive?.content ?: "unknown"
-                        val method = request["method"]?.jsonPrimitive?.content
-
-                        // Store request for processing
-                        pendingRequests[id] = request
-
-                        // Send response via SSE
-                        scope.launch {
-                            delay(100) // Small delay to simulate processing
-
-                            val response = when (method) {
-                                "tools/list" -> buildJsonObject {
-                                    put("jsonrpc", "2.0")
-                                    put("id", id)
-                                    put("result", buildJsonObject {
-                                        put("tools", buildJsonArray {})
-                                    })
-                                }
-                                "initialize" -> buildJsonObject {
-                                    put("jsonrpc", "2.0")
-                                    put("id", id)
-                                    put("result", buildJsonObject {
-                                        put("protocolVersion", "2024-11-05")
-                                        put("capabilities", buildJsonObject {})
-                                        put("serverInfo", buildJsonObject {
-                                            put("name", "mock-sse-server")
-                                            put("version", "1.0.0")
-                                        })
-                                    })
-                                }
-                                else -> buildJsonObject {
-                                    put("jsonrpc", "2.0")
-                                    put("id", id)
-                                    put("result", JsonNull)
-                                }
-                            }
-
-                            sendEvent(SseEvent(
-                                data = Json.encodeToString(response)
-                            ))
-                        }
-
-                        call.respond(HttpStatusCode.Accepted)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid request")
-                    }
+                post("/messages/") {
+                    requestCount["/messages/"] = requestCount.getOrDefault("/messages/", 0) + 1
+                    handlePostRequest(call)
                 }
             }
         }.start(wait = false)
+    }
+
+    private suspend fun handlePostRequest(call: ApplicationCall) {
+        if (!isResponding.get()) {
+            call.respond(HttpStatusCode.ServiceUnavailable)
+            return
+        }
+
+        try {
+            val request = call.receive<JsonObject>()
+            val id = request["id"]?.jsonPrimitive?.content ?: "unknown"
+            val method = request["method"]?.jsonPrimitive?.content
+            
+            val sessionId = call.request.queryParameters["session_id"] ?: "default"
+
+            if (method != "initialize" && method != "notifications/initialized" && !initializedSessions.contains(sessionId)) {
+                call.respond(HttpStatusCode.BadRequest, "Request before initialization")
+                return
+            }
+
+            // Store request for processing
+            pendingRequests[id] = request
+
+            // Send response via SSE
+            scope.launch {
+                delay(100) // Small delay to simulate processing
+
+                val response = when (method) {
+                    "tools/list" -> buildJsonObject {
+                        put("jsonrpc", "2.0")
+                        put("id", id)
+                        put("result", buildJsonObject {
+                            put("tools", buildJsonArray {
+                                tools.forEach { tool ->
+                                    add(buildJsonObject {
+                                        put("name", tool.name)
+                                        tool.description?.let { put("description", it) }
+                                        tool.inputSchema?.let { put("inputSchema", it) }
+                                    })
+                                }
+                            })
+                        })
+                    }
+                    "initialize" -> {
+                        initializedSessions.add(sessionId)
+                        buildJsonObject {
+                            put("jsonrpc", "2.0")
+                            put("id", id)
+                            put("result", buildJsonObject {
+                                put("protocolVersion", "2024-11-05")
+                                put("capabilities", buildJsonObject {})
+                                put("serverInfo", buildJsonObject {
+                                    put("name", "mock-sse-server")
+                                    put("version", "1.0.0")
+                                })
+                            })
+                        }
+                    }
+                    "notifications/initialized" -> null
+                    else -> buildJsonObject {
+                        put("jsonrpc", "2.0")
+                        put("id", id)
+                        put("result", JsonNull)
+                    }
+                }
+
+                if (response != null) {
+                    sendEvent(SseEvent(
+                        data = Json.encodeToString(response)
+                    ))
+                }
+            }
+
+            call.respond(HttpStatusCode.Accepted)
+        } catch (e: Exception) {
+            call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid request")
+        }
     }
 
     fun stop() {
@@ -144,6 +202,14 @@ class MockSseServer(private val port: Int = 8081) {
 
     fun setResponding(responding: Boolean) {
         isResponding.set(responding)
+    }
+
+    fun addTool(name: String, description: String? = null, inputSchema: JsonObject? = null) {
+        tools.add(MockTool(name, description, inputSchema))
+    }
+
+    fun clearTools() {
+        tools.clear()
     }
 
     fun sendEvent(event: SseEvent) {

@@ -12,6 +12,11 @@ repositories {
 
 kotlin {
     jvm {
+        testRuns.named("test") {
+            executionTask.configure {
+                useJUnitPlatform()
+            }
+        }
         @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
         mainRun {
             mainClass.set("com.mckli.MainKt")
@@ -51,6 +56,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                implementation("io.github.oshai:kotlin-logging:7.0.0")
                 implementation("com.github.ajalt.clikt:clikt:5.1.0")
                 implementation("io.ktor:ktor-client-core:2.3.12")
                 implementation("io.ktor:ktor-client-cio:2.3.12")
@@ -69,7 +75,12 @@ kotlin {
             }
         }
 
-        val jvmMain by getting
+        val jvmMain by getting {
+            dependencies {
+                implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+                implementation("ch.qos.logback:logback-classic:1.5.6")
+            }
+        }
         val jvmTest by getting {
             dependencies {
                 implementation("io.cucumber:cucumber-java8:7.18.1")
@@ -78,6 +89,7 @@ kotlin {
                 implementation("io.mockk:mockk:1.13.12")
                 implementation("io.ktor:ktor-server-core:2.3.12")
                 implementation("io.ktor:ktor-server-netty:2.3.12")
+                implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
             }
         }
 
@@ -104,5 +116,6 @@ tasks.register<Jar>("fatJar") {
 
     val jvmMain = kotlin.targets["jvm"].compilations["main"]
     from(jvmMain.output.classesDirs)
+    from(jvmMain.output.resourcesDir)
     from(jvmMain.runtimeDependencyFiles?.map { if (it.isDirectory) it else zipTree(it) })
 }

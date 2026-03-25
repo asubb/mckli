@@ -1,5 +1,5 @@
 package com.mckli.config
-
+ 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
@@ -8,7 +8,10 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.long
-
+import io.github.oshai.kotlinlogging.KotlinLogging
+ 
+private val logger = KotlinLogging.logger {}
+ 
 class ConfigCommand : CliktCommand(name = "config") {
     override fun help(context: Context) = "Manage MCP server configuration"
     init {
@@ -30,6 +33,7 @@ class ConfigAddCommand : CliktCommand(name = "add") {
     private val poolSize by option("--pool-size", help = "Connection pool size").int().default(10)
 
     override fun run() {
+        logger.info { "Adding new MCP server: $name with endpoint: $endpoint" }
         val configManager = ConfigManager()
         val validator = ConfigValidator()
 
@@ -77,6 +81,7 @@ class ConfigRemoveCommand : CliktCommand(name = "remove") {
     private val name by argument(help = "Server name to remove")
 
     override fun run() {
+        logger.info { "Removing MCP server: $name" }
         val configManager = ConfigManager()
         var config = configManager.readConfig() ?: Configuration()
 
@@ -95,6 +100,7 @@ class ConfigListCommand : CliktCommand(name = "list") {
     override fun help(context: Context) = "List configured MCP servers"
 
     override fun run() {
+        logger.info { "Listing configured MCP servers" }
         val configManager = ConfigManager()
         val config = configManager.readConfig()
 

@@ -1,5 +1,5 @@
 package com.mckli.tools
-
+ 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
@@ -7,9 +7,12 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.option
 import com.mckli.client.RequestRouter
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.builtins.ListSerializer
-
+ 
+private val logger = KotlinLogging.logger {}
+ 
 class ToolsCommand : CliktCommand(name = "tools") {
     override fun help(context: Context) = "Manage and invoke MCP tools"
     init {
@@ -26,17 +29,24 @@ class ToolsCommand : CliktCommand(name = "tools") {
 
 class ToolsListCommand : CliktCommand(name = "list") {
     override fun help(context: Context) = "List available tools"
-
+ 
     private val server by argument(help = "Server name").optional()
     private val filter by option("--filter", "-f", help = "Filter tools by name or description")
+ 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
 
     override fun run() {
+        logger.info { "Listing tools from server: ${server ?: "default"}" }
         val router = RequestRouter(server)
 
         router.listTools(filter).fold(
             onSuccess = { result ->
                 try {
-                    val tools = Json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
+                    val tools = json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
 
                     if (tools.isEmpty()) {
                         echo("No tools available")
@@ -50,6 +60,7 @@ class ToolsListCommand : CliktCommand(name = "list") {
                         }
                     }
                 } catch (e: Exception) {
+                    logger.error(e) { "Error parsing tools: ${e.message}. Raw result: $result" }
                     echo("Error parsing tools: ${e.message}", err = true)
                     throw com.github.ajalt.clikt.core.CliktError("Failed to parse tools")
                 }
@@ -64,17 +75,24 @@ class ToolsListCommand : CliktCommand(name = "list") {
 
 class ToolsDescribeCommand : CliktCommand(name = "describe") {
     override fun help(context: Context) = "Show detailed information about a tool"
-
+ 
     private val server by argument(help = "Server name").optional()
     private val toolName by argument(help = "Tool name")
+ 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
+    }
 
     override fun run() {
+        logger.info { "Describing tool: $toolName from server: ${server ?: "default"}" }
         val router = RequestRouter(server)
 
         router.describeTool(toolName).fold(
             onSuccess = { result ->
                 try {
-                    val tool = Json.decodeFromJsonElement(ToolMetadata.serializer(), result)
+                    val tool = json.decodeFromJsonElement(ToolMetadata.serializer(), result)
 
                     echo("Tool: ${tool.name}")
                     tool.description?.let { echo("Description: $it") }
@@ -84,6 +102,7 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
                         echo(Json { prettyPrint = true }.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), schema))
                     }
                 } catch (e: Exception) {
+                    logger.error(e) { "Error parsing tool details: ${e.message}. Raw result: $result" }
                     echo("Error parsing tool details: ${e.message}", err = true)
                     throw com.github.ajalt.clikt.core.CliktError("Failed to parse tool details")
                 }
@@ -98,10 +117,11 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
 
 class ToolsRefreshCommand : CliktCommand(name = "refresh") {
     override fun help(context: Context) = "Refresh tool cache from MCP server"
-
+ 
     private val server by argument(help = "Server name").optional()
-
+ 
     override fun run() {
+        logger.info { "Refreshing tools from server: ${server ?: "default"}" }
         val router = RequestRouter(server)
 
         router.refreshTools().fold(
@@ -118,12 +138,13 @@ class ToolsRefreshCommand : CliktCommand(name = "refresh") {
 
 class ToolsCallCommand : CliktCommand(name = "call") {
     override fun help(context: Context) = "Invoke an MCP tool"
-
+ 
     private val server by argument(help = "Server name").optional()
     private val toolName by argument(help = "Tool name")
     private val jsonArgs by option("--json", "-j", help = "Tool arguments as JSON")
-
+ 
     override fun run() {
+        logger.info { "Calling tool: $toolName from server: ${server ?: "default"} with args: $jsonArgs" }
         val router = RequestRouter(server)
 
         val arguments = jsonArgs?.let { jsonStr ->
