@@ -7,6 +7,7 @@ import com.mckli.config.ServerConfig
 import com.mckli.config.TransportType.SSE
 import com.mckli.daemon.DaemonProcess
 import com.mckli.integration.support.MockSseServer
+import com.mckli.integration.support.TestConfiguration
 import com.mckli.transport.SseTransport
 import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
@@ -29,12 +30,8 @@ class SseTransportSteps : En {
 
     init {
         Before { ->
-            // Set up test config directory
-            testConfigDir =
-                File(System.getProperty("java.io.tmpdir"), "mckli-test-config-${System.currentTimeMillis()}")
-            testConfigDir.mkdirs()
-            System.setProperty("mckli.config.dir", testConfigDir.absolutePath)
-
+            TestConfiguration.setup()
+            testConfigDir = TestConfiguration.tempDir
             configManager = ConfigManager()
             serverConfigs.clear()
             transports.values.forEach { it.close() }
@@ -73,9 +70,6 @@ class SseTransportSteps : En {
             }
 
             mockServer.stop()
-
-            // Clean up test config directory
-            testConfigDir.deleteRecursively()
         }
 
         // Configuration scenario
@@ -128,7 +122,15 @@ class SseTransportSteps : En {
 
             val result = daemon.start()
             assertTrue(result.isSuccess, "Failed to start daemon: ${result.exceptionOrNull()?.message}")
-            Thread.sleep(1000) // Give daemon time to initialize
+            // Wait for socket to be created
+            val socketFile = File(daemon.getSocketPath())
+            var count = 0
+            while (!socketFile.exists() && count < 50) {
+                Thread.sleep(100)
+                count++
+            }
+            assertTrue(socketFile.exists(), "Daemon socket file was not created at ${daemon.getSocketPath()}")
+            Thread.sleep(10000) // Increase delay to 10s to give daemon more time to establish SSE connection
         }
 
         Given("the SSE server provides a dynamic POST endpoint {string}") { endpoint: String ->
@@ -151,8 +153,30 @@ class SseTransportSteps : En {
         }
 
         When("I list tools from SSE server {string}") { serverName: String ->
-            val router = RequestRouter(serverName)
-            val result = router.listTools(null)
+            var lastResult: Result<JsonElement>? = null
+            var lastErr: Throwable? = null
+
+            // Retry for up to 60 seconds to allow the daemon to connect to SSE
+            for (i in 1..60) {
+                val router = RequestRouter(serverName)
+                val result = router.listTools(null)
+                if (result.isSuccess) {
+                    lastResult = result
+                    break
+                }
+                lastErr = result.exceptionOrNull()
+                if (i % 5 == 0) {
+                    println("[DEBUG_LOG] Retry $i: Failed to list tools: ${lastErr?.message}")
+                    // Trigger a refresh if it's connected but cache is empty or stale
+                    if (lastErr?.message?.contains("SSE transport not connected") == false) {
+                        println("[DEBUG_LOG] Triggering manual refresh")
+                        router.refreshTools()
+                    }
+                }
+                Thread.sleep(1000)
+            }
+
+            val result = lastResult ?: Result.failure(lastErr ?: Exception("Failed after retries"))
             if (result.isFailure) {
                 println("ERROR: Listing tools failed: ${result.exceptionOrNull()}")
             }

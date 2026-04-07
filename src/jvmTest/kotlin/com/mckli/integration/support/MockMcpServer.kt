@@ -104,10 +104,14 @@ class MockMcpServer(private val port: Int = 8080) {
         error: String? = null,
         delayMs: Long = 0
     ) {
+        println("[DEBUG_LOG] MockMcpServer: Adding tool '$name' (error=$error, delay=$delayMs)")
+        // Remove existing tool with same name to avoid duplicates in this list-backed mock
+        tools.removeIf { it.name == name }
         tools.add(MockTool(name, description, inputSchema, response, error, delayMs))
     }
 
     fun clearTools() {
+        println("[DEBUG_LOG] MockMcpServer: Clearing tools")
         tools.clear()
     }
 
@@ -153,9 +157,11 @@ class MockMcpServer(private val port: Int = 8080) {
         val params = request["params"]?.jsonObject
         val toolName = params?.get("name")?.jsonPrimitive?.content
 
+        println("[DEBUG_LOG] MockMcpServer: Tool call for '$toolName'. Available tools: ${tools.map { it.name }}")
         val tool = tools.find { it.name == toolName }
 
         if (tool == null) {
+            println("[DEBUG_LOG] MockMcpServer: Tool '$toolName' NOT FOUND")
             call.respond(HttpStatusCode.OK, buildJsonObject {
                 put("jsonrpc", "2.0")
                 put("id", id)
@@ -173,6 +179,7 @@ class MockMcpServer(private val port: Int = 8080) {
         }
 
         if (tool.error != null) {
+            println("[DEBUG_LOG] MockMcpServer returning error for $toolName: ${tool.error}")
             call.respond(HttpStatusCode.OK, buildJsonObject {
                 put("jsonrpc", "2.0")
                 put("id", id)
@@ -182,10 +189,18 @@ class MockMcpServer(private val port: Int = 8080) {
                 })
             })
         } else {
+            println("[DEBUG_LOG] MockMcpServer returning success for $toolName")
             call.respond(HttpStatusCode.OK, buildJsonObject {
                 put("jsonrpc", "2.0")
                 put("id", id)
-                put("result", tool.response ?: JsonNull)
+                put("result", tool.response ?: buildJsonObject {
+                    put("content", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", "Success")
+                        })
+                    })
+                })
             })
         }
     }

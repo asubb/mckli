@@ -36,13 +36,19 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             val classpath = System.getProperty("java.class.path")
 
             // Spawn daemon process
-            val processBuilder = ProcessBuilder(
-                javaBin,
-                "-cp", classpath,
-                "-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}",
-                "com.mckli.daemon.DaemonMainKt",
-                config.name
-            )
+            val args = mutableListOf(javaBin, "-cp", classpath)
+            
+            // Pass configuration and daemon directory properties if they are set
+            System.getProperty("mckli.config.dir")?.let { args.add("-Dmckli.config.dir=$it") }
+            System.getProperty("mckli.daemons.dir")?.let { args.add("-Dmckli.daemons.dir=$it") }
+            
+            args.add("-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}")
+            args.add("-DDAEMON_NAME=${config.name}")
+            args.add("com.mckli.daemon.DaemonMainKt")
+            args.add(config.name)
+
+            println("[DEBUG_LOG] Spawning daemon: ${args.joinToString(" ")}")
+            val processBuilder = ProcessBuilder(args)
 
             // Keep existing redirection for stdout/stderr as fallback/main output
             processBuilder.redirectOutput(File(daemonsDir, "${config.name}.log"))
@@ -51,10 +57,21 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             val process = processBuilder.start()
 
             // Wait briefly to ensure process started
-            Thread.sleep(500)
+            var waited = 0L
+            val waitStep = 100L
+            val maxWait = 5000L // 5 seconds is plenty for a local process to fail if it's going to
+            
+            while (waited < maxWait) {
+                Thread.sleep(waitStep)
+                waited += waitStep
+                if (!process.isAlive) break
+            }
 
             if (!process.isAlive) {
-                return Result.failure(DaemonException("Daemon failed to start"))
+                val exitCode = process.exitValue()
+                println("[DEBUG_LOG] Daemon process for '${config.name}' exited early with code $exitCode")
+                // For our tests, any early exit is a failure, even if code is 0 (which shouldn't happen for errors)
+                return Result.failure(DaemonException("Daemon failed to start (exit code: $exitCode)"))
             }
 
             // Write PID file

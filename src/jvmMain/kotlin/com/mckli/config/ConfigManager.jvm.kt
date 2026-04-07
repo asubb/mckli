@@ -9,18 +9,30 @@ private val logger = KotlinLogging.logger {}
  
 actual class ConfigManager {
     actual fun getConfigPath(): String {
-        val home = System.getProperty("user.home")
-        val configDir = File(home, ".config/mckli")
+        val configDirStr = System.getProperty("mckli.config.dir")
+        val configDir = if (configDirStr != null) {
+            File(configDirStr)
+        } else {
+            val home = System.getProperty("user.home")
+            File(home, ".config/mckli")
+        }
+
         if (!configDir.exists()) {
             logger.debug { "Creating configuration directory: ${configDir.absolutePath}" }
             configDir.mkdirs()
         }
         return File(configDir, "servers.json").absolutePath
     }
- 
+
     actual fun getDaemonsPath(): String {
-        val home = System.getProperty("user.home")
-        val daemonsDir = File(home, ".config/mckli/daemons")
+        val daemonsDirStr = System.getProperty("mckli.daemons.dir")
+        val daemonsDir = if (daemonsDirStr != null) {
+            File(daemonsDirStr)
+        } else {
+            val home = System.getProperty("user.home")
+            File(home, ".config/mckli/daemons")
+        }
+
         if (!daemonsDir.exists()) {
             logger.debug { "Creating daemons directory: ${daemonsDir.absolutePath}" }
             daemonsDir.mkdirs()

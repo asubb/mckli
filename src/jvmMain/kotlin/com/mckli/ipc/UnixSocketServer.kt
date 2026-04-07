@@ -152,11 +152,7 @@ class UnixSocketServer(
                 }
 
                 is IpcRequest.DescribeTool -> {
-                    if (toolCache.getTool(request.toolName) == null) {
-                        logger.debug { "Tool '${request.toolName}' not found in cache, refreshing..." }
-                        toolCache.refresh()
-                    }
-                    val tool = toolCache.getTool(request.toolName)
+                    val tool = toolCache.getTool(request.toolName, autoRefresh = true)
                     if (tool != null) {
                         IpcResponse.Success(
                             requestId = request.requestId,
@@ -171,7 +167,7 @@ class UnixSocketServer(
                 }
 
                 is IpcRequest.CallTool -> {
-                    toolCache.callTool(request.toolName, request.arguments, connectionPool).fold(
+                    val res = toolCache.callTool(request.toolName, request.arguments, connectionPool).fold(
                         onSuccess = { result ->
                             IpcResponse.Success(
                                 requestId = request.requestId,
@@ -179,6 +175,7 @@ class UnixSocketServer(
                             )
                         },
                         onFailure = { error ->
+                            logger.error(error) { "Tool call failed: ${error.message}" }
                             IpcResponse.Error(
                                 requestId = request.requestId,
                                 error = error.message ?: "Tool execution failed",
@@ -186,6 +183,8 @@ class UnixSocketServer(
                             )
                         }
                     )
+                    println("[DEBUG_LOG] IPC response for CallTool: $res")
+                    res
                 }
 
                 is IpcRequest.RefreshTools -> {

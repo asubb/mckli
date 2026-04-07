@@ -26,6 +26,7 @@ class HttpTransport(private val config: ServerConfig) : McpTransport {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
+        coerceInputValues = true
     }
     private var isInitialized = false
 
@@ -59,6 +60,7 @@ class HttpTransport(private val config: ServerConfig) : McpTransport {
                         is AuthConfig.Basic -> {
                             basicAuth(auth.username, auth.password)
                         }
+
                         is AuthConfig.Bearer -> {
                             bearerAuth(auth.token)
                         }
@@ -135,22 +137,53 @@ class HttpTransport(private val config: ServerConfig) : McpTransport {
 
                 when {
                     response.status.isSuccess() -> {
-                        val mcpResponse = response.body<McpResponse>()
+                        val bodyText = response.bodyAsText()
+                        logger.debug { "Received HTTP response body: $bodyText" }
+                        if (bodyText.isEmpty()) {
+                            return@withTimeout Result.success(McpResponse())
+                        }
+                        val mcpResponse = try {
+                            json.decodeFromString<McpResponse>(bodyText)
+                        } catch (e: Exception) {
+                            logger.error(e) { "Failed to decode MCP response: $bodyText" }
+                            return@withTimeout Result.failure(
+                                McpException(
+                                    "Invalid MCP response: ${e.message}",
+                                    McpError(-32603, "Internal error")
+                                )
+                            )
+                        }
+
                         if (mcpResponse.error != null) {
                             logger.debug { "MCP response contains error: ${mcpResponse.error.message}" }
-                            Result.failure(McpException("MCP error: ${mcpResponse.error.message}", mcpResponse.error))
+                            Result.failure(McpException(mcpResponse.error.message, mcpResponse.error))
+                        } else if (mcpResponse.result == null && mcpResponse.id != null && request.method != "notifications/initialized") {
+                            // If bodyText is "{}" or similar, decodeFromString might succeed with all-null fields
+                            if (bodyText.contains("\"error\"") || bodyText.contains("'error'")) {
+                                Result.failure(
+                                    McpException(
+                                        "Tool execution failed",
+                                        McpError(-32603, "Tool execution failed")
+                                    )
+                                )
+                            } else {
+                                Result.success(mcpResponse)
+                            }
                         } else {
                             Result.success(mcpResponse)
                         }
                     }
+
                     response.status.value in 400..499 -> {
                         val body = response.bodyAsText()
                         Result.failure(ClientErrorException(response.status.value, "Client error: $body"))
                     }
+
                     response.status.value in 500..599 -> {
                         val body = response.bodyAsText()
                         Result.failure(ServerErrorException(response.status.value, "Server error: $body"))
                     }
+
                     else -> {
                         Result.failure(HttpException(response.status.value, "HTTP error: ${response.status}"))
                     }

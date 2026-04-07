@@ -2,6 +2,7 @@ package com.mckli.tools
 
 import com.mckli.http.ConnectionPool
 import com.mckli.http.McpRequest
+import com.mckli.http.McpException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,10 +64,18 @@ class ToolCache(private val connectionPool: ConnectionPool) {
         }
     }
 
-    suspend fun getTool(name: String): ToolMetadata? {
-        return mutex.withLock {
-            tools[name]
+    suspend fun getTool(name: String, autoRefresh: Boolean = false): ToolMetadata? {
+        val tool = mutex.withLock { tools[name] }
+        if (tool == null && autoRefresh) {
+            logger.debug { "Tool '$name' not found in cache, refreshing..." }
+            try {
+                refresh()
+            } catch (e: Exception) {
+                logger.error(e) { "Failed to refresh tool cache for $name" }
+            }
+            return mutex.withLock { tools[name] }
         }
+        return tool
     }
 
     suspend fun getToolCount(): Int {
@@ -80,7 +89,7 @@ class ToolCache(private val connectionPool: ConnectionPool) {
         arguments: JsonElement?,
         pool: ConnectionPool
     ): Result<JsonElement> {
-        val tool = getTool(toolName)
+        val tool = getTool(toolName, autoRefresh = true)
             ?: return Result.failure(ToolCacheException("Tool '$toolName' not found"))
 
         val request = McpRequest(
@@ -97,11 +106,23 @@ class ToolCache(private val connectionPool: ConnectionPool) {
         return pool.executeRequest { transport ->
             transport.sendRequest(request).fold(
                 onSuccess = { response ->
-                    response.result?.let { Result.success(it) }
-                        ?: Result.failure(ToolCacheException("No result from tool call"))
+                    if (response.error != null) {
+                        Result.failure(ToolCacheException(response.error.message))
+                    } else if (response.result == null && request.method != "notifications/initialized") {
+                        Result.failure(ToolCacheException("No result from tool call"))
+                    } else {
+                        Result.success(response.result ?: JsonNull)
+                    }
                 },
                 onFailure = { error ->
-                    Result.failure(ToolCacheException("Tool call failed: ${error.message}", error))
+                    val message = if (error is McpException) {
+                        error.error.message
+                    } else if (error.message?.contains("timeout", ignoreCase = true) == true || error is com.mckli.http.TimeoutException) {
+                        "timeout"
+                    } else {
+                        error.message ?: "Tool call failed"
+                    }
+                    Result.failure(ToolCacheException(message, error))
                 }
             )
         }

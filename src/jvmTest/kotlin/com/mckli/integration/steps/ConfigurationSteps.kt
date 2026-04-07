@@ -1,6 +1,7 @@
 package com.mckli.integration.steps
 
 import com.mckli.config.*
+import com.mckli.integration.support.TestConfiguration
 import io.cucumber.java8.En
 import java.io.File
 import kotlin.test.assertEquals
@@ -17,6 +18,7 @@ class ConfigurationSteps : En {
 
     init {
         Before { ->
+            TestConfiguration.setup()
             configManager = ConfigManager()
             validator = ConfigValidator()
         }
@@ -145,11 +147,7 @@ class ConfigurationSteps : En {
     }
 
     private fun cleanConfigDirectory() {
-        val configPath = File(System.getProperty("java.io.tmpdir"), "mckli-test-config")
-        configPath.deleteRecursively()
-        configPath.mkdirs()
-
-        // Override config path for testing
-        System.setProperty("mckli.config.dir", configPath.absolutePath)
+        val configPath = TestConfiguration.tempDir
+        configPath.listFiles()?.forEach { it.deleteRecursively() }
     }
 }

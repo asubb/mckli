@@ -2,6 +2,7 @@ package com.mckli.integration.steps
 
 import com.mckli.client.RequestRouter
 import com.mckli.integration.support.MockMcpServer
+import com.mckli.integration.support.TestConfiguration
 import com.mckli.tools.ToolMetadata
 import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
@@ -16,6 +17,10 @@ class ToolSteps : En {
     private var lastError: String? = null
 
     init {
+        Before { ->
+            TestConfiguration.setup()
+        }
+
         Before("@requires-mock-server") { ->
             mockServer = MockMcpServer(8080)
             mockServer?.start()
@@ -52,6 +57,10 @@ class ToolSteps : En {
                 description = "Test tool",
                 inputSchema = schema
             )
+        }
+
+        Given("the MCP server has a tool {string}") { toolName: String ->
+            mockServer?.addTool(name = toolName)
         }
 
         Given("the MCP server has a tool {string} that accepts:") { toolName: String, dataTable: DataTable ->
@@ -167,7 +176,23 @@ class ToolSteps : En {
 
         When("I refresh tools for {string}") { serverName: String ->
             val router = RequestRouter(serverName)
-            router.refreshTools()
+            val result = router.refreshTools()
+            assertTrue(result.isSuccess, "Refresh should succeed: ${result.exceptionOrNull()?.message}")
+            // Wait for cache update - we need to see the NEW tool
+            var found = false
+            for (i in 1..20) {
+                Thread.sleep(1000)
+                println("[DEBUG_LOG] Polling for new-tool, attempt $i")
+                val res = router.listTools(null)
+                val toolList = res.getOrNull()?.jsonArray
+                println("[DEBUG_LOG] Current tools: ${toolList?.map { it.jsonObject["name"]?.jsonPrimitive?.content }}")
+                if (toolList?.any { it.jsonObject["name"]?.jsonPrimitive?.content == "new-tool" } == true) {
+                    toolListResult = Json.decodeFromJsonElement(res.getOrNull()!!)
+                    found = true
+                    break
+                }
+            }
+            assertTrue(found, "New tool not found in cache after refresh and wait")
         }
 
         When("the MCP server updates its tools to:") { dataTable: DataTable ->
@@ -202,11 +227,18 @@ class ToolSteps : En {
         When("I call tool {string} without arguments") { toolName: String ->
             val router = RequestRouter(null)
             toolCallResult = router.callTool(toolName, null)
+            lastError = toolCallResult!!.exceptionOrNull()?.message
+            println("[DEBUG_LOG] Tool call result for $toolName: success=${toolCallResult!!.isSuccess} error=$lastError")
+            if (toolCallResult!!.isSuccess) {
+                println("[DEBUG_LOG] Result body: ${toolCallResult!!.getOrNull()}")
+            }
         }
 
         When("I try to call tool {string} without arguments") { toolName: String ->
             val router = RequestRouter(null)
             toolCallResult = router.callTool(toolName, null)
+            lastError = toolCallResult!!.exceptionOrNull()?.message
+            println("[DEBUG_LOG] Tool call result for $toolName: success=${toolCallResult!!.isSuccess} error=$lastError")
         }
 
         When("I call tool {string} with JSON output format") { toolName: String ->

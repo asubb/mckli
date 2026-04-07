@@ -2,7 +2,8 @@
     <timestamp key="bySecond" datePattern="yyyy-MM-dd_HH-mm-ss"/>
     
     <appender name="DAEMON_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>${MCKLI_LOG_DIR:-${user.home}/.config/mckli/daemons}/mckli-daemon-${bySecond}.log</file>
+        <file>${MCKLI_LOG_DIR:-${user.home}/.config/mckli/daemons}/mckli-daemon-${DAEMON_NAME:-unknown}.log</file>
+        <append>true</append>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
