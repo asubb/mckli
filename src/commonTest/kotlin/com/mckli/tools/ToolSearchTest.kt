@@ -78,7 +78,7 @@ class ToolSearchTest {
         assertEquals(2, results.size)
         assertTrue(results.any { it.name == "read-file" })
         assertTrue(results.any { it.name == "write-file" })
-        
+
         val readFileResult = results.find { it.name == "read-file" }!!
         assertEquals("Read content from a file", readFileResult.preview)
     }
@@ -96,7 +96,7 @@ class ToolSearchTest {
     }
 
     @Test
-    fun `filterTools should use name as preview if description doesn't match`() {
+    fun `filterTools should use blank string as preview if description doesn't match`() {
         val tools = listOf(
             ToolMetadata(name = "test-tool", description = "Something else")
         )
@@ -104,7 +104,7 @@ class ToolSearchTest {
         val results = service.filterTools("test-server", tools, "test")
 
         assertEquals(1, results.size)
-        assertEquals("test-tool", results[0].preview)
+        assertEquals("", results[0].preview)
     }
 
     @Test

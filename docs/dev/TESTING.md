@@ -42,6 +42,16 @@ src/commonTest/kotlin/com/mckli/
 ./gradlew test --tests "com.mckli.tools.*"
 ```
 
+### Integration Tests (Cucumber)
+
+```bash
+# Run all integration tests
+./gradlew test --tests "com.mckli.integration.CucumberTestRunner"
+
+# Run specific features by tag
+./gradlew test --tests "com.mckli.integration.CucumberTestRunner" -Dcucumber.filter.tags="@daemon"
+```
+
 ### Run Single Test Class
 
 ```bash
@@ -111,16 +121,17 @@ src/commonTest/kotlin/com/mckli/
   - Complex schema handling
   - Null description handling
 
-### Integration Tests (TODO)
+### Integration Tests (Completed)
 
-The following integration tests should be added:
+Integration tests use Cucumber to verify high-level user functionality and end-to-end flows.
 
-- [ ] Daemon lifecycle (start/stop/restart)
-- [ ] CLI-to-daemon IPC communication
-- [ ] Tool discovery flow
-- [ ] Tool invocation flow
-- [ ] Error scenario handling
-- [ ] Multiplatform compatibility
+- ✅ **Configuration Feature** - Management of MCP server configurations
+- ✅ **Daemon Lifecycle Feature** - Process management (start/stop/restart/status)
+- ✅ **Tool Discovery Feature** - Fetching, describing, and caching tools
+- ✅ **Tool Invocation Feature** - Executing tools with arguments and handling results
+- ✅ **SSE Transport Feature** - Real-time streaming communication (JVM only)
+
+See [INTEGRATION-TESTING.md](INTEGRATION-TESTING.md) for more details.
 
 ## Writing Tests
 
@@ -313,7 +324,6 @@ println(json.encodeToString(data))
 
 ## Next Steps
 
-- Add integration tests for daemon lifecycle
-- Create mock MCP server for testing
 - Add performance benchmarks
 - Set up CI/CD pipeline with test reporting
+- Implement visual regression tests for CLI output

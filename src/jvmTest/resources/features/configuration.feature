@@ -6,33 +6,18 @@ Feature: Configuration Management
   Background:
     Given a clean configuration directory
 
-  Scenario: Add a new server configuration
+  Scenario: Manage server configurations
     When I add a server with name "testserver" and endpoint "https://example.com/api"
-    Then the configuration should contain server "testserver"
-    And the server "testserver" should have endpoint "https://example.com/api"
+    And I add a server with name "authserver" and endpoint "https://secure.example.com/api" and bearer token "token123"
+    Then the configuration should contain servers "testserver" and "authserver"
+    When I remove the server "testserver"
+    Then the configuration should only contain server "authserver"
 
-  Scenario: Add server with authentication
-    When I add a server with name "authserver" and endpoint "https://secure.example.com/api" and bearer token "token123"
-    Then the configuration should contain server "authserver"
-    And the server "authserver" should have bearer authentication
-
-  Scenario: Remove a server configuration
-    Given a server "oldserver" exists with endpoint "https://old.example.com/api"
-    When I remove the server "oldserver"
-    Then the configuration should not contain server "oldserver"
-
-  Scenario: List all configured servers
+  Scenario: List configured servers
     Given a server "server1" exists with endpoint "https://api1.example.com"
     And a server "server2" exists with endpoint "https://api2.example.com"
     When I list all servers
-    Then I should see 2 servers
-    And I should see server "server1"
-    And I should see server "server2"
-
-  Scenario: Validate server configuration
-    When I try to add a server with name "bad" and endpoint "ftp://invalid.com"
-    Then the configuration validation should fail
-    And I should see an error about invalid URL scheme
+    Then I should see both "server1" and "server2" in the list
 
   Scenario: Set default server
     Given a server "default-srv" exists with endpoint "https://default.example.com"

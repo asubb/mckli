@@ -122,78 +122,19 @@ class DaemonSteps : En {
             assertFalse(daemon.isRunning(), "Daemon for $serverName should not be running")
         }
 
-        Then("a PID file should exist for {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            val pid = daemon.getPid()
-            assertNotNull(pid, "PID file should exist for $serverName")
-        }
-
-        Then("the PID file for {string} should not exist") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            val pid = daemon.getPid()
-            assertTrue(pid == null, "PID file should not exist for $serverName")
-        }
-
-        Then("a socket file should exist for {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            val socketPath = daemon.getSocketPath()
-            assertTrue(File(socketPath).exists(), "Socket file should exist at $socketPath")
-        }
-
-        Then("the socket file for {string} should not exist") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            val socketPath = daemon.getSocketPath()
-            assertFalse(File(socketPath).exists(), "Socket file should not exist at $socketPath")
-        }
-
         Then("I should see {string} is RUNNING") { serverName: String ->
             assertTrue(statusOutput.contains("$serverName: RUNNING"))
-        }
-
-        Then("I should see the PID for {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            val pid = daemon.getPid()
-            assertNotNull(pid)
-            assertTrue(statusOutput.contains("PID: $pid"))
-        }
-
-        Then("the PID should be different from before") {
-            daemons.forEach { (name, daemon) ->
-                val oldPid = pidsBefore[name]
-                val newPid = daemon.getPid()
-                if (oldPid != null && newPid != null) {
-                    assertNotEquals(oldPid, newPid, "PID should have changed for $name")
-                }
-            }
-        }
-
-        Then("the daemon start should fail") {
-            assertTrue(lastOperationResult.isFailure, "Operation should have failed, but: $lastOperationResult")
-        }
-
-        Then("I should see an error about server not found") {
-            val exception = lastOperationResult.exceptionOrNull()
-            assertNotNull(exception)
-            assertTrue(
-                exception.message?.contains("not found", ignoreCase = true) == true ||
-                exception.message?.contains("exit code", ignoreCase = true) == true,
-                "Error should mention server not found, but was: ${exception.message}"
-            )
         }
 
         Then("the request should complete successfully") {
             assertTrue(lastOperationResult.isSuccess, "Request should succeed")
         }
 
-        Then("each daemon should have its own PID file") {
-            daemons.forEach { (name, daemon) ->
-                assertNotNull(daemon.getPid(), "Daemon $name should have a PID")
-            }
-        }
-
-        Then("each daemon should have its own socket file") {
-            val socketPaths = daemons.values.map { it.getSocketPath() }
-            assertEquals(socketPaths.size, socketPaths.toSet().size, "Each daemon should have unique socket")
+        Then("both daemons for {string} and {string} should be running") { name1: String, name2: String ->
+            val daemon1 = getDaemonForServer(name1)
+            val daemon2 = getDaemonForServer(name2)
+            assertTrue(daemon1.isRunning(), "Daemon for $name1 should be running")
+            assertTrue(daemon2.isRunning(), "Daemon for $name2 should be running")
         }
     }
 

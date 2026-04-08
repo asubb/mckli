@@ -10,6 +10,7 @@ It:
 
 - 🔄 **Maintains persistent connections** - Daemon processes keep HTTP connections alive to MCP servers
 - 💾 **Caches tool metadata** - Tools are discovered once and cached, eliminating repeated discovery calls
+- 🌐 **SSE Transport Support** - Real-time streaming for MCP servers (JVM only)
 - 🚀 **Exposes tools as CLI commands** - LLMs can invoke MCP tools via simple shell commands
 - ⚡ **Auto-starts daemons** - Daemons launch automatically on first request
 - 🌐 **Supports multiple servers** - Manage and connect to multiple MCP servers simultaneously
@@ -104,9 +105,10 @@ mckli tools call myserver read-file --json '{"path": "/tmp/file.txt"}'
 
 ### Persistent Connections
 
-- One daemon per MCP server maintains long-lived HTTP connections
+- One daemon per MCP server maintains long-lived HTTP or SSE connections
 - Connection pool with configurable size (default: 10)
 - Automatic connection lifecycle management (idle timeout, max lifetime)
+- **Automatic Reconnection**: SSE transport automatically recovers from connection drops with exponential backoff
 
 ### Tool Caching
 

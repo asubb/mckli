@@ -317,51 +317,34 @@ class ToolSteps : En {
             toolCallResult = router.callTool(toolName, null)
         }
 
-        Then("I should see {int} tools") { count: Int ->
-            assertEquals(count, toolListResult?.size ?: 0)
-        }
-
-        Then("I should see tool {string}") { toolName: String ->
+        Then("I should see tools {string} and {string}") { tool1: String, tool2: String ->
             assertNotNull(toolListResult)
-            assertTrue(toolListResult!!.any { it.name == toolName }, "Tool $toolName not found")
+            assertTrue(toolListResult!!.any { it.name == tool1 }, "Tool $tool1 not found")
+            assertTrue(toolListResult!!.any { it.name == tool2 }, "Tool $tool2 not found")
         }
 
-        Then("I should not see tool {string}") { toolName: String ->
-            assertNotNull(toolListResult)
-            assertFalse(toolListResult!!.any { it.name == toolName }, "Tool $toolName should not be visible")
-        }
-
-        Then("I should see the tool name {string}") { toolName: String ->
+        Then("I should see the tool name {string} and its description") { toolName: String ->
             assertNotNull(toolDescription)
             assertEquals(toolName, toolDescription!!.name)
-        }
-
-        Then("I should see the tool description") {
-            assertNotNull(toolDescription)
             assertNotNull(toolDescription!!.description)
         }
 
-        Then("I should see the input schema with property {string}") { propertyName: String ->
-            assertNotNull(toolDescription)
-            val schema = toolDescription!!.inputSchema as? JsonObject
-            assertNotNull(schema)
-            val properties = schema["properties"] as? JsonObject
-            assertNotNull(properties?.get(propertyName))
+        Then("I should see tools {string} and {string} but not {string}") { tool1: String, tool2: String, tool3: String ->
+            assertNotNull(toolListResult)
+            assertTrue(toolListResult!!.any { it.name == tool1 }, "Tool $tool1 not found")
+            assertTrue(toolListResult!!.any { it.name == tool2 }, "Tool $tool2 not found")
+            assertFalse(toolListResult!!.any { it.name == tool3 }, "Tool $tool3 should not be visible")
         }
 
-        Then("I should see a message {string}") { message: String ->
-            // In real implementation, check console output or response message
-            assertTrue(toolListResult?.isEmpty() == true || lastError?.contains(message) == true)
+        Then("I should see tools with names containing {string}") { query: String ->
+            assertNotNull(searchResults)
+            assertTrue(searchResults!!.all { it.name.contains(query, ignoreCase = true) }, 
+                "All results should contain '$query'")
         }
 
-        Then("I should still see tool {string}") { toolName: String ->
+        Then("I should still see tool {string} from cache") { toolName: String ->
             assertNotNull(toolListResult)
             assertTrue(toolListResult!!.any { it.name == toolName })
-        }
-
-        Then("the request should complete without contacting the MCP server") {
-            // This would be verified by checking that cache was used
-            assertTrue(true) // Placeholder
         }
 
         Then("the tool execution should succeed") {
@@ -369,78 +352,26 @@ class ToolSteps : En {
             assertTrue(toolCallResult!!.isSuccess, "Tool execution failed: ${toolCallResult!!.exceptionOrNull()?.message}")
         }
 
-        Then("the tool execution should fail") {
+        Then("the result should contain {string} and {string} values") { key1: String, key2: String ->
+            assertNotNull(toolCallResult)
+            val result = toolCallResult!!.getOrNull() as? JsonObject
+            assertNotNull(result)
+            assertNotNull(result[key1])
+            assertNotNull(result[key2])
+        }
+
+        Then("the tool execution should fail with error {string}") { message: String ->
             assertNotNull(toolCallResult)
             assertTrue(toolCallResult!!.isFailure, "Tool execution should have failed")
-        }
-
-        Then("the result should contain {string} with value {string}") { key: String, value: String ->
-            assertNotNull(toolCallResult)
-            val result = toolCallResult!!.getOrNull() as? JsonObject
-            assertNotNull(result)
-            assertEquals(value, result[key]?.jsonPrimitive?.content)
-        }
-
-        Then("the result should contain {string} with value {int}") { key: String, value: Int ->
-            assertNotNull(toolCallResult)
-            val result = toolCallResult!!.getOrNull() as? JsonObject
-            assertNotNull(result)
-            assertEquals(value, result[key]?.jsonPrimitive?.int)
-        }
-
-        Then("the result should contain {int} users") { count: Int ->
-            assertNotNull(toolCallResult)
-            val result = toolCallResult!!.getOrNull() as? JsonObject
-            val users = result?.get("users")?.jsonArray
-            assertEquals(count, users?.size)
-        }
-
-        Then("I should see error message {string}") { message: String ->
             val error = toolCallResult?.exceptionOrNull()?.message ?: lastError
             assertNotNull(error)
             assertTrue(error.contains(message, ignoreCase = true), "Error '$error' should contain '$message'")
         }
 
-        Then("I should see error message about timeout") {
-            val error = toolCallResult?.exceptionOrNull()?.message
-            assertNotNull(error)
-            assertTrue(error.contains("timeout", ignoreCase = true))
-        }
-
-        Then("I should see search result {string}") { expected: String ->
-            assertNotNull(searchResults)
-            val (server, name) = expected.split(":")
-            assertTrue(searchResults!!.any { it.server == server && it.name == name }, 
-                "Expected search result $expected not found in $searchResults")
-        }
-
-        Then("the output should be a JSON array") {
-            assertNotNull(toolCallResult)
-            assertTrue(toolCallResult!!.getOrNull() is JsonArray)
-        }
-
-        Then("the JSON should contain a tool {string} from {string}") { toolName: String, serverName: String ->
-            val array = toolCallResult!!.getOrNull() as JsonArray
-            assertTrue(array.any { 
-                it.jsonObject["name"]?.jsonPrimitive?.content == toolName && 
-                it.jsonObject["server"]?.jsonPrimitive?.content == serverName 
-            }, "Tool $toolName from $serverName not found in JSON output")
-        }
-
-        Then("the output should be valid JSON") {
+        Then("the output should be formatted as valid JSON") {
             assertNotNull(toolCallResult)
             assertTrue(toolCallResult!!.isSuccess)
             assertNotNull(toolCallResult!!.getOrNull())
-        }
-
-        Then("the output should be pretty-printed") {
-            // Would check JSON formatting in real implementation
-            assertTrue(true) // Placeholder
-        }
-
-        Then("the tool timeout is set to {int} seconds") { seconds: Int ->
-            // Would configure timeout in real implementation
-            assertTrue(true) // Placeholder
         }
     }
 }

@@ -91,11 +91,13 @@ Tests daemon process management:
 
 **Example scenario:**
 ```gherkin
-Scenario: Start a daemon process
+Scenario: Basic daemon lifecycle
   When I start the daemon for server "testserver"
   Then the daemon for "testserver" should be running
-  And a PID file should exist for "testserver"
-  And a socket file should exist for "testserver"
+  When I restart the daemon for "testserver"
+  Then the daemon for "testserver" should be running
+  When I stop the daemon for "testserver"
+  Then the daemon for "testserver" should not be running
 ```
 
 ### Tool Discovery Feature
@@ -103,19 +105,20 @@ Scenario: Start a daemon process
 Tests tool caching and discovery:
 - Listing tools
 - Describing tools
-- Filtering
+- Searching and filtering
 - Cache refresh
 
 **Example scenario:**
 ```gherkin
-Scenario: List all available tools
+Scenario: Discover and describe tools
   Given the MCP server has tools:
     | name        | description           |
     | read-file   | Read a file           |
     | write-file  | Write to a file       |
   When I list tools from "testserver"
-  Then I should see 2 tools
-  And I should see tool "read-file"
+  Then I should see tools "read-file" and "write-file"
+  When I describe tool "read-file" from "testserver"
+  Then I should see the tool name "read-file" and its description
 ```
 
 ### Tool Invocation Feature
@@ -123,13 +126,14 @@ Scenario: List all available tools
 Tests tool execution:
 - Calling tools with arguments
 - Error handling
-- Timeout behavior
 - Output formatting
 
 **Example scenario:**
 ```gherkin
 Scenario: Call a tool with arguments
-  Given the MCP server has a tool "read-file"
+  Given the MCP server has a tool "read-file" that accepts:
+    | parameter | type   | required |
+    | path      | string | true     |
   And the tool "read-file" returns:
     """
     {"content": "Hello, World!", "size": 13}
@@ -139,7 +143,24 @@ Scenario: Call a tool with arguments
     {"path": "/tmp/test.txt"}
     """
   Then the tool execution should succeed
-  And the result should contain "content" with value "Hello, World!"
+  And the result should contain "content" and "size" values
+```
+
+### SSE Transport Feature
+
+Tests real-time streaming communication:
+- Basic SSE transport lifecycle
+- Dynamic endpoint support
+- Auto-reconnection with exponential backoff
+
+**Example scenario:**
+```gherkin
+Scenario: Basic SSE transport lifecycle
+  Given a server "sseserver" with SSE transport
+  When I start the daemon for SSE server "sseserver"
+  Then the SSE daemon for "sseserver" should be running
+  When I list tools from SSE server "sseserver"
+  Then I should see tools from the SSE server
 ```
 
 ## Mock MCP Server

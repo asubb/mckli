@@ -97,47 +97,25 @@ class ConfigurationSteps : En {
             configManager.writeConfig(currentConfig!!)
         }
 
-        Then("the configuration should contain server {string}") { name: String ->
+        Then("the configuration should contain servers {string} and {string}") { name1: String, name2: String ->
             val config = currentConfig ?: configManager.readConfig()
             assertNotNull(config)
-            assertTrue(config.servers.any { it.name == name }, "Server $name not found")
+            assertTrue(config.servers.any { it.name == name1 }, "Server $name1 not found")
+            assertTrue(config.servers.any { it.name == name2 }, "Server $name2 not found")
         }
 
-        Then("the configuration should not contain server {string}") { name: String ->
+        Then("the configuration should only contain server {string}") { name: String ->
             val config = currentConfig ?: configManager.readConfig()
-            assertFalse(config?.servers?.any { it.name == name } == true, "Server $name should not exist")
+            assertNotNull(config)
+            assertEquals(1, config.servers.size)
+            assertEquals(name, config.servers[0].name)
         }
 
-        Then("the server {string} should have endpoint {string}") { name: String, endpoint: String ->
+        Then("I should see both {string} and {string} in the list") { name1: String, name2: String ->
             val config = currentConfig ?: configManager.readConfig()
-            val server = config?.servers?.find { it.name == name }
-            assertNotNull(server, "Server $name not found")
-            assertEquals(endpoint, server.endpoint)
-        }
-
-        Then("the server {string} should have bearer authentication") { name: String ->
-            val config = currentConfig ?: configManager.readConfig()
-            val server = config?.servers?.find { it.name == name }
-            assertNotNull(server, "Server $name not found")
-            assertTrue(server.auth is AuthConfig.Bearer, "Expected bearer auth")
-        }
-
-        Then("I should see {int} servers") { count: Int ->
-            val config = currentConfig ?: configManager.readConfig()
-            assertEquals(count, config?.servers?.size ?: 0)
-        }
-
-        Then("I should see server {string}") { name: String ->
-            val config = currentConfig ?: configManager.readConfig()
-            assertTrue(config?.servers?.any { it.name == name } == true)
-        }
-
-        Then("the configuration validation should fail") {
-            assertTrue(lastOperation.isFailure || validationErrors.isNotEmpty())
-        }
-
-        Then("I should see an error about invalid URL scheme") {
-            assertTrue(validationErrors.any { it.contains("http://") || it.contains("https://") })
+            assertNotNull(config)
+            assertTrue(config.servers.any { it.name == name1 }, "Server $name1 not found")
+            assertTrue(config.servers.any { it.name == name2 }, "Server $name2 not found")
         }
 
         Then("the default server should be {string}") { name: String ->

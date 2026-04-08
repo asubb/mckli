@@ -220,6 +220,21 @@ cat ~/.config/mckli/daemons/myserver.err
 tail -f ~/.config/mckli/daemons/myserver.log
 ```
 
+### SSE Transport (JVM only)
+
+For servers that support real-time streaming:
+
+```bash
+# Add an SSE server
+mckli config add streaming-server https://mcp.example.com/sse --transport SSE
+```
+
+SSE features:
+- **Persistent connection**: The daemon maintains a long-lived SSE stream.
+- **Dynamic endpoints**: Automatically handles dynamic POST endpoints provided by the server.
+- **Auto-reconnect**: Automatically reconnects with exponential backoff if the stream is interrupted.
+- **Real-time updates**: Tools are updated in real-time if the server provides tool events.
+
 ---
 
 ## Working with Tools

@@ -1,11 +1,11 @@
 package com.mckli.daemon
 
-import com.mckli.config.ServerConfig
 import com.mckli.config.ConfigManager
+import com.mckli.config.ServerConfig
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.concurrent.TimeUnit
+
+private val log = KotlinLogging.logger {  }
 
 actual class DaemonProcess actual constructor(private val config: ServerConfig) {
     private val configManager = ConfigManager()
@@ -18,6 +18,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             daemonsDir.mkdirs()
         }
         cleanupStaleSocket()
+        log.info { "Initialized daemon process for '${config.name}', daemon directory: ${daemonsDir.absolutePath}" }
     }
 
     actual fun start(): Result<Unit> {

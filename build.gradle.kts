@@ -83,6 +83,7 @@ kotlin {
         }
         val jvmTest by getting {
             dependencies {
+                implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
                 implementation("io.cucumber:cucumber-java8:7.18.1")
                 implementation("io.cucumber:cucumber-junit-platform-engine:7.18.1")
                 implementation("org.junit.platform:junit-platform-suite:1.10.3")
@@ -90,6 +91,7 @@ kotlin {
                 implementation("io.ktor:ktor-server-core:2.3.12")
                 implementation("io.ktor:ktor-server-netty:2.3.12")
                 implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
+                implementation("ch.qos.logback:logback-classic:1.5.6")
             }
         }
 
