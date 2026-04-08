@@ -11,7 +11,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.*
 import java.util.concurrent.atomic.AtomicBoolean
 
-class MockMcpServer(private val port: Int = 8080) {
+class MockMcpServer(val port: Int = 8080) {
     private var server: NettyApplicationEngine? = null
     private val tools = mutableListOf<MockTool>()
     private val isResponding = AtomicBoolean(true)

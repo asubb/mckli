@@ -46,52 +46,50 @@ actual class RequestRouter actual constructor(private val serverName: String?) {
 
     private fun <T : JsonElement> executeRequest(
         requestBuilder: (String, String) -> IpcRequest
-    ): Result<T> {
-        return try {
-            val serverConfig = getServerConfig(serverName, configManager)
-            logger.debug { "Routing request to server: ${serverConfig.name}" }
-            val daemon = DaemonProcess(serverConfig)
+    ): Result<T> = try {
+        val serverConfig = getServerConfig(serverName, configManager)
+        logger.debug { "Routing request to server: ${serverConfig.name}" }
+        val daemon = DaemonProcess(serverConfig)
 
-            // Auto-start daemon if not running
-            if (!daemon.isRunning()) {
-                logger.debug { "Daemon for ${serverConfig.name} is not running, auto-starting..." }
-                daemon.start().onFailure { error ->
-                    return Result.failure(RouterException("Failed to auto-start daemon: ${error.message}", error))
-                }
-
-                // Give daemon time to initialize
-                logger.debug { "Waiting for daemon to initialize..." }
-                Thread.sleep(1000)
+        // Auto-start daemon if not running
+        if (!daemon.isRunning()) {
+            logger.debug { "Daemon for ${serverConfig.name} is not running, auto-starting..." }
+            daemon.start().onFailure { error ->
+                return Result.failure(RouterException("Failed to auto-start daemon: ${error.message}", error))
             }
 
-            val socketPath = daemon.getSocketPath()
-            val requestId = generateRequestId()
-
-            val request = requestBuilder(socketPath, requestId)
-            logger.debug { "Building IPC request with id: $requestId" }
-            val client = UnixSocketClient(socketPath)
-
-            client.sendRequest(request).fold(
-                onSuccess = { response ->
-                    logger.debug { "Received response from daemon for request: $requestId" }
-                    when (response) {
-                        is IpcResponse.Success -> Result.success(response.result as T)
-                        is IpcResponse.Error -> {
-                            logger.debug { "Daemon returned error for request $requestId: ${response.error}" }
-                            Result.failure(
-                                RouterException("Request failed: ${response.error}\n${response.details ?: ""}")
-                            )
-                        }
-                    }
-                },
-                onFailure = { error ->
-                    logger.debug(error) { "IPC call failed for request: $requestId" }
-                    Result.failure(RouterException("IPC failed: ${error.message}", error))
-                }
-            )
-        } catch (e: Exception) {
-            logger.error(e) { "Unexpected router error" }
-            Result.failure(RouterException("Router error: ${e.message}", e))
+            // Give daemon time to initialize
+            logger.debug { "Waiting for daemon to initialize..." }
+            Thread.sleep(1000)
         }
+
+        val socketPath = daemon.getSocketPath()
+        val requestId = generateRequestId()
+
+        val request = requestBuilder(socketPath, requestId)
+        logger.debug { "Building IPC request with id: $requestId" }
+        val client = UnixSocketClient(socketPath)
+
+        client.sendRequest(request).fold(
+            onSuccess = { response ->
+                logger.debug { "Received response from daemon for request: $requestId" }
+                when (response) {
+                    is IpcResponse.Success -> Result.success(response.result as T)
+                    is IpcResponse.Error -> {
+                        logger.debug { "Daemon returned error for request $requestId: ${response.error}" }
+                        Result.failure(
+                            RouterException("Request failed: ${response.error}\n${response.details ?: ""}")
+                        )
+                    }
+                }
+            },
+            onFailure = { error ->
+                logger.debug(error) { "IPC call failed for request: $requestId" }
+                Result.failure(RouterException("IPC failed: ${error.message}", error))
+            }
+        )
+    } catch (e: Exception) {
+        logger.error(e) { "Unexpected router error" }
+        Result.failure(RouterException("Router error: ${e.message}", e))
     }
 }

@@ -5,11 +5,16 @@ import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.optional
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.mckli.client.RequestRouter
+import com.mckli.config.ConfigManager
+import com.mckli.config.Configuration
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encodeToString
  
 private val logger = KotlinLogging.logger {}
  
@@ -18,6 +23,7 @@ class ToolsCommand : CliktCommand(name = "tools") {
     init {
         subcommands(
             ToolsListCommand(),
+            ToolsSearchCommand(),
             ToolsDescribeCommand(),
             ToolsRefreshCommand(),
             ToolsCallCommand()
@@ -29,29 +35,69 @@ class ToolsCommand : CliktCommand(name = "tools") {
 
 class ToolsListCommand : CliktCommand(name = "list") {
     override fun help(context: Context) = "List available tools"
- 
+
     private val server by argument(help = "Server name").optional()
     private val filter by option("--filter", "-f", help = "Filter tools by name or description")
- 
+    private val jsonOutput by option("--json", help = "Output in JSON format").flag()
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
+        prettyPrint = true
     }
 
     override fun run() {
-        logger.info { "Listing tools from server: ${server ?: "default"}" }
-        val router = RequestRouter(server)
+        val configManager = ConfigManager()
+        val config = configManager.readConfig() ?: Configuration()
 
-        router.listTools(filter).fold(
-            onSuccess = { result ->
-                try {
-                    val tools = json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
+        val serversToQuery = if (server != null) {
+            listOf(server!!)
+        } else {
+            config.servers.map { it.name }
+        }
 
+        if (serversToQuery.isEmpty()) {
+            echo("No servers configured", err = true)
+            return
+        }
+
+        val allTools = mutableMapOf<String, List<ToolMetadata>>()
+        var hasError = false
+
+        serversToQuery.forEach { serverName ->
+            val router = RequestRouter(serverName)
+            router.listTools(filter).fold(
+                onSuccess = { result ->
+                    try {
+                        val tools = json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
+                        allTools[serverName] = tools
+                    } catch (e: Exception) {
+                        logger.error(e) { "Error parsing tools for $serverName: ${e.message}" }
+                        hasError = true
+                    }
+                },
+                onFailure = { error ->
+                    logger.error { "Error listing tools for $serverName: ${error.message}" }
+                    hasError = true
+                }
+            )
+        }
+
+        if (jsonOutput) {
+            val jsonResult = allTools.map { (server, tools) ->
+                ServerTools(server, tools)
+            }
+            echo(json.encodeToString(jsonResult))
+        } else {
+            if (allTools.isEmpty()) {
+                echo("No tools available")
+            } else {
+                allTools.forEach { (serverName, tools) ->
+                    echo("Server: $serverName")
                     if (tools.isEmpty()) {
-                        echo("No tools available")
+                        echo("  No tools available")
                     } else {
-                        echo("Available tools (${tools.size}):")
                         tools.forEach { tool ->
                             echo("  ${tool.name}")
                             tool.description?.let { desc ->
@@ -59,26 +105,64 @@ class ToolsListCommand : CliktCommand(name = "list") {
                             }
                         }
                     }
-                } catch (e: Exception) {
-                    logger.error(e) { "Error parsing tools: ${e.message}. Raw result: $result" }
-                    echo("Error parsing tools: ${e.message}", err = true)
-                    throw com.github.ajalt.clikt.core.CliktError("Failed to parse tools")
+                    echo("")
                 }
-            },
-            onFailure = { error ->
-                echo("Error listing tools: ${error.message}", err = true)
-                throw com.github.ajalt.clikt.core.CliktError("Failed to list tools")
             }
-        )
+            if (hasError) {
+                echo("Warning: Some servers could not be queried", err = true)
+            }
+        }
+    }
+}
+
+@Serializable
+internal data class ServerTools(val server: String, val tools: List<ToolMetadata>)
+
+class ToolsSearchCommand : CliktCommand(name = "search") {
+    override fun help(context: Context) = "Search for tools across all servers"
+
+    private val query by argument(help = "Search query")
+    private val jsonOutput by option("--json", help = "Output in JSON format").flag()
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
+    }
+
+    private val searchService = ToolSearchService(json)
+
+    override fun run() {
+        val configManager = ConfigManager()
+        val config = configManager.readConfig() ?: Configuration()
+
+        val results = searchService.searchAcrossServers(config.servers, query)
+
+        if (jsonOutput) {
+            echo(json.encodeToString(results))
+        } else {
+            if (results.isEmpty()) {
+                echo("No matches found for '$query'")
+            } else {
+                results.forEach { res ->
+                    val previewSnippet = res.preview.lines().firstOrNull() ?: ""
+                    val truncatedPreview = if (previewSnippet.length > 80) {
+                        previewSnippet.take(77) + "..."
+                    } else {
+                        previewSnippet
+                    }
+                    echo("${res.server}:${res.name} $truncatedPreview")
+                }
+            }
+        }
     }
 }
 
 class ToolsDescribeCommand : CliktCommand(name = "describe") {
     override fun help(context: Context) = "Show detailed information about a tool"
- 
-    private val server by argument(help = "Server name").optional()
+
+    private val server by argument(help = "Server name")
     private val toolName by argument(help = "Tool name")
- 
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -86,7 +170,7 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
     }
 
     override fun run() {
-        logger.info { "Describing tool: $toolName from server: ${server ?: "default"}" }
+        logger.info { "Describing tool: $toolName from server: $server" }
         val router = RequestRouter(server)
 
         router.describeTool(toolName).fold(

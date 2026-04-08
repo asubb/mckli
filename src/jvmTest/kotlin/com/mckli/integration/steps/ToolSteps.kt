@@ -6,15 +6,27 @@ import com.mckli.integration.support.TestConfiguration
 import com.mckli.tools.ToolMetadata
 import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.*
 
 class ToolSteps : En {
     private var mockServer: MockMcpServer? = null
+    private val mockServers = mutableMapOf<Int, MockMcpServer>()
     private var toolListResult: List<ToolMetadata>? = null
     private var toolDescription: ToolMetadata? = null
     private var toolCallResult: Result<JsonElement>? = null
+    private var searchResults: List<SearchResult>? = null
     private var lastError: String? = null
+
+    @Serializable
+    private data class SearchResult(
+        val server: String,
+        val name: String,
+        val description: String?,
+        val preview: String
+    )
 
     init {
         Before { ->
@@ -22,20 +34,25 @@ class ToolSteps : En {
         }
 
         Before("@requires-mock-server") { ->
-            mockServer = MockMcpServer(8080)
-            mockServer?.start()
+            val server = MockMcpServer(8080)
+            mockServer = server
+            mockServers[8080] = server
+            server.start()
             Thread.sleep(500) // Give server time to start
         }
 
         After("@requires-mock-server") { ->
-            mockServer?.stop()
+            mockServers.values.forEach { it.stop() }
+            mockServers.clear()
             mockServer = null
         }
 
         Given("a mock MCP server is running on port {int}") { port: Int ->
-            if (mockServer == null) {
-                mockServer = MockMcpServer(port)
-                mockServer?.start()
+            if (!mockServers.containsKey(port)) {
+                val server = MockMcpServer(port)
+                mockServers[port] = server
+                if (port == 8080) mockServer = server
+                server.start()
                 Thread.sleep(500)
             }
         }
@@ -109,6 +126,17 @@ class ToolSteps : En {
 
         Given("the tool {string} takes {int} seconds to respond") { toolName: String, seconds: Int ->
             mockServer?.addTool(name = toolName, delayMs = seconds * 1000L)
+        }
+
+        Given("the MCP server on port {int} has tools:") { port: Int, dataTable: DataTable ->
+            val server = mockServers[port] ?: throw IllegalStateException("No mock server on port $port")
+            val tools = dataTable.asMaps()
+            tools.forEach { row ->
+                server.addTool(
+                    name = row["name"]!!,
+                    description = row["description"]
+                )
+            }
         }
 
         Given("the MCP server has no tools") {
@@ -216,6 +244,49 @@ class ToolSteps : En {
             result.getOrNull()?.let { jsonElement ->
                 toolListResult = Json.decodeFromJsonElement(jsonElement)
             }
+        }
+
+        When("I search for {string}") { query: String ->
+            val configManager = com.mckli.config.ConfigManager()
+            val config = configManager.readConfig() ?: com.mckli.config.Configuration()
+            val results = mutableListOf<SearchResult>()
+            val json = Json { ignoreUnknownKeys = true }
+
+            config.servers.forEach { serverConfig ->
+                val router = com.mckli.client.RequestRouter(serverConfig.name)
+                router.listTools(null).onSuccess { result ->
+                    val tools = json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
+                    tools.forEach { tool ->
+                        if (tool.name.contains(query, ignoreCase = true) || 
+                            tool.description?.contains(query, ignoreCase = true) == true) {
+                            results.add(SearchResult(serverConfig.name, tool.name, tool.description, tool.description ?: tool.name))
+                        }
+                    }
+                }
+            }
+            searchResults = results
+        }
+
+        When("I search for {string} with JSON format") { query: String ->
+            val configManager = com.mckli.config.ConfigManager()
+            val config = configManager.readConfig() ?: com.mckli.config.Configuration()
+            val results = mutableListOf<SearchResult>()
+            val json = Json { ignoreUnknownKeys = true }
+
+            config.servers.forEach { serverConfig ->
+                val router = com.mckli.client.RequestRouter(serverConfig.name)
+                router.listTools(null).onSuccess { result ->
+                    val tools = json.decodeFromJsonElement(ListSerializer(ToolMetadata.serializer()), result)
+                    tools.forEach { tool ->
+                        if (tool.name.contains(query, ignoreCase = true) || 
+                            tool.description?.contains(query, ignoreCase = true) == true) {
+                            results.add(SearchResult(serverConfig.name, tool.name, tool.description, tool.description ?: tool.name))
+                        }
+                    }
+                }
+            }
+            searchResults = results
+            toolCallResult = Result.success(json.encodeToJsonElement(ListSerializer(SearchResult.serializer()), results))
         }
 
         When("I call tool {string} with arguments:") { toolName: String, argsJson: String ->
@@ -334,6 +405,26 @@ class ToolSteps : En {
             val error = toolCallResult?.exceptionOrNull()?.message
             assertNotNull(error)
             assertTrue(error.contains("timeout", ignoreCase = true))
+        }
+
+        Then("I should see search result {string}") { expected: String ->
+            assertNotNull(searchResults)
+            val (server, name) = expected.split(":")
+            assertTrue(searchResults!!.any { it.server == server && it.name == name }, 
+                "Expected search result $expected not found in $searchResults")
+        }
+
+        Then("the output should be a JSON array") {
+            assertNotNull(toolCallResult)
+            assertTrue(toolCallResult!!.getOrNull() is JsonArray)
+        }
+
+        Then("the JSON should contain a tool {string} from {string}") { toolName: String, serverName: String ->
+            val array = toolCallResult!!.getOrNull() as JsonArray
+            assertTrue(array.any { 
+                it.jsonObject["name"]?.jsonPrimitive?.content == toolName && 
+                it.jsonObject["server"]?.jsonPrimitive?.content == serverName 
+            }, "Tool $toolName from $serverName not found in JSON output")
         }
 
         Then("the output should be valid JSON") {

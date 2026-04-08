@@ -82,3 +82,30 @@ Feature: Tool Discovery and Caching
     When I list tools from "testserver"
     Then I should see a message "No tools available"
     And the request should complete successfully
+
+  @requires-mock-server
+  Scenario: Search for tools across all servers
+    Given a mock MCP server is running on port 8081
+    And a server "server2" exists with endpoint "http://localhost:8081/api"
+    And the MCP server on port 8080 has tools:
+      | name        | description           |
+      | read-file   | Read a file           |
+      | write-file  | Write to a file       |
+    And the MCP server on port 8081 has tools:
+      | name        | description           |
+      | search-text | Search text in files  |
+      | list-files  | List files            |
+    When I search for "file"
+    Then I should see search result "testserver:read-file"
+    And I should see search result "testserver:write-file"
+    And I should see search result "server2:search-text"
+    And I should see search result "server2:list-files"
+
+  @requires-mock-server
+  Scenario: Search results in JSON format
+    Given the MCP server has tools:
+      | name        | description           |
+      | read-file   | Read a file           |
+    When I search for "read" with JSON format
+    Then the output should be a JSON array
+    And the JSON should contain a tool "read-file" from "testserver"
