@@ -589,6 +589,38 @@ cd mckli
 
 ---
 
+## Technology Stack
+
+| Component                 | Version | Purpose                |
+|---------------------------|---------|------------------------|
+| **Kotlin**                | 2.3.20  | Multiplatform language |
+| **Clikt**                 | 5.1.0   | CLI framework          |
+| **Ktor**                  | 2.3.12  | HTTP client            |
+| **kotlinx.serialization** | 1.7.3   | JSON handling          |
+| **kotlinx.coroutines**    | 1.9.0   | Async operations       |
+
+## Project Structure
+
+```
+mckli/
+├── src/
+│   ├── commonMain/kotlin/com/mckli/
+│   │   ├── config/          # Configuration management
+│   │   ├── daemon/          # Daemon lifecycle
+│   │   ├── http/            # HTTP client & connection pool
+│   │   ├── ipc/             # Unix socket IPC
+│   │   ├── client/          # Request routing
+│   │   ├── tools/           # Tool discovery & invocation
+│   │   └── Main.kt
+│   ├── jvmMain/kotlin/      # JVM-specific implementations
+│   └── nativeMain/kotlin/   # Native-specific implementations
+├── docs/
+│   ├── user/                # User documentation
+│   └── dev/                 # Developer documentation
+├── openspec/                # OpenSpec change documentation
+└── build.gradle.kts
+```
+
 ## Troubleshooting Development Issues
 
 ### Build Fails

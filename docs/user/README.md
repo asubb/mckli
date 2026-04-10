@@ -241,27 +241,38 @@ SSE features:
 
 ### Listing Tools
 
+The `tools list` command displays available tools from MCP servers. By default, it uses a **compact view** (name and first line of description) for readability.
+
 ```bash
-# List all tools from a server
+# List all tools from a server (compact view)
 mckli tools list myserver
+
+# Show full descriptions and schemas
+mckli tools list myserver --full
 
 # Filter tools by name/description
 mckli tools list myserver --filter "file"
 ```
 
-Output:
+Compact Output:
 ```
-Available tools (5):
-  read-file
-    Read contents of a file from the filesystem
-  write-file
-    Write content to a file
-  list-files
-    List files in a directory
-  delete-file
-    Delete a file
-  search-files
-    Search for files matching a pattern
+Server: myserver
+  read-file             Read contents of a file from the filesystem...
+  write-file            Write content to a file
+  list-files            List files in a directory
+  delete-file           Delete a file
+  search-files          Search for files matching a pattern...
+```
+
+Full Output (`--full` or `-l`):
+```
+Server: myserver
+Tool: read-file
+Description: Read contents of a file from the filesystem
+Multi-line description continues here...
+Input Schema: {"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}
+----------------------------------------
+...
 ```
 
 ### Describing Tools
@@ -563,6 +574,106 @@ while true; do
 
   sleep 60
 done
+```
+
+---
+
+## Configuration Details
+
+Configuration is stored in `~/.config/mckli/servers.json`.
+
+### Config File Format
+
+```json
+{
+  "servers": [
+    {
+      "name": "myserver",
+      "endpoint": "https://mcp.example.com/api",
+      "transport": "HTTP",
+      "auth": {
+        "type": "Bearer",
+        "token": "your-token"
+      },
+      "timeout": 30000,
+      "poolSize": 10
+    },
+    {
+      "name": "streaming-server",
+      "endpoint": "https://mcp.example.com/sse",
+      "transport": "SSE",
+      "timeout": 30000,
+      "poolSize": 10
+    }
+  ],
+  "defaultServer": "myserver"
+}
+```
+
+### Transport Types
+
+**HTTP (default)**
+Standard request/response communication. Best for most MCP servers with lower overhead and predictable behavior.
+
+**SSE (Server-Sent Events)**
+Streaming communication for real-time updates.
+- Persistent connection with server-initiated messages.
+- Automatic reconnection with exponential backoff.
+- Supports real-time notifications from the server.
+- Note: JVM platform only (not available on Native builds).
+
+### Daemon State
+
+Daemon-related files are stored in `~/.config/mckli/daemons/`:
+- `<server-name>.pid`: Process ID files.
+- `<server-name>.sock`: Unix domain sockets (or named pipes on Windows).
+- `<server-name>.log`: Daemon standard output logs.
+- `<server-name>.err`: Daemon error logs.
+
+---
+
+## Troubleshooting
+
+### Daemon won't start
+
+1. **Check logs**:
+   ```bash
+   cat ~/.config/mckli/daemons/<server>.log
+   cat ~/.config/mckli/daemons/<server>.err
+   ```
+2. **Clean up stale processes**:
+   ```bash
+   mckli daemon status
+   mckli daemon stop <server> --force
+   ```
+
+### Connection issues
+
+1. **Verify server configuration**:
+   ```bash
+   mckli config list
+   ```
+2. **Test daemon connectivity**:
+   ```bash
+   mckli tools list <server>
+   ```
+3. **Restart daemon**:
+   ```bash
+   mckli daemon restart <server>
+   ```
+
+### SSE Transport Issues
+
+- **Connection not establishing**: Check daemon logs for SSE connection errors and verify the server endpoint supports SSE (typically `/sse` or `/stream`).
+- **Frequent reconnections**: Server may be unstable or overloaded. Check network stability and consider increasing the timeout in configuration.
+- **"Max reconnection attempts exceeded"**: Server is down or unreachable. Fixing the server issue and restarting the daemon is required.
+- **SSE only available on JVM**: Native builds do not support SSE transport yet. Use the JVM version (`fatJar`) for SSE support.
+
+### Tool cache issues
+
+If tools have changed on the server but are not showing up in `mckli`:
+```bash
+mckli tools refresh <server>
 ```
 
 ---
