@@ -39,6 +39,7 @@ class ToolsListCommand : CliktCommand(name = "list") {
     private val server by argument(help = "Server name").optional()
     private val filter by option("--filter", "-f", help = "Filter tools by name or description")
     private val jsonOutput by option("--json", help = "Output in JSON format").flag()
+    private val fullOutput by option("--full", "-l", help = "Show full tool descriptions").flag()
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -99,9 +100,20 @@ class ToolsListCommand : CliktCommand(name = "list") {
                         echo("  No tools available")
                     } else {
                         tools.forEach { tool ->
-                            echo("  ${tool.name}")
-                            tool.description?.let { desc ->
-                                echo("    $desc")
+                            if (fullOutput) {
+                                echo("Tool: ${tool.name}")
+                                echo("Description: ${tool.description ?: "No description"}")
+                                if (tool.inputSchema != null) {
+                                    echo("Input Schema: ${json.encodeToString(tool.inputSchema)}")
+                                }
+                                echo("-".repeat(40))
+                            } else {
+                                val desc = tool.getCompactDescription()
+                                if (desc != null) {
+                                    echo("  ${tool.name.padEnd(20)}  $desc")
+                                } else {
+                                    echo("  ${tool.name}")
+                                }
                             }
                         }
                     }

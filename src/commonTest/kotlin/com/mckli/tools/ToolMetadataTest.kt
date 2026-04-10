@@ -156,4 +156,39 @@ class ToolMetadataTest {
         assertEquals("unknown-keys-tool", metadata.name)
         assertEquals("Tool with unknown keys", metadata.description)
     }
+
+    @Test
+    fun `getCompactDescription truncates long first line`() {
+        val longLine = "a".repeat(250)
+        val metadata = ToolMetadata("test", longLine)
+        val compact = metadata.getCompactDescription()
+        assertEquals("a".repeat(197) + "...", compact)
+        assertEquals(200, compact?.length)
+    }
+
+    @Test
+    fun `getCompactDescription truncates at first newline`() {
+        val multiLine = "First line\nSecond line"
+        val metadata = ToolMetadata("test", multiLine)
+        assertEquals("First line...", metadata.getCompactDescription())
+    }
+
+    @Test
+    fun `getCompactDescription handles short single line`() {
+        val short = "Short description"
+        val metadata = ToolMetadata("test", short)
+        assertEquals("Short description", metadata.getCompactDescription())
+    }
+
+    @Test
+    fun `getCompactDescription handles null description`() {
+        val metadata = ToolMetadata("test", null)
+        assertNull(metadata.getCompactDescription())
+    }
+
+    @Test
+    fun `getCompactDescription handles empty description`() {
+        val metadata = ToolMetadata("test", "")
+        assertEquals("", metadata.getCompactDescription())
+    }
 }
