@@ -35,16 +35,17 @@ A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Mode
 
 ### 1. Installation
 
-Build the application using the included Gradle wrapper (requires Java 21+):
+Install the latest release of `mckli` using the one-liner command (requires Java 21+):
 
 ```bash
-# Build self-contained JAR
-./gradlew fatJar
-# Artifact: build/libs/mckli-all.jar
+curl -sL https://raw.githubusercontent.com/mckli/openspec/main/scripts/install.sh | bash
+```
 
-# Or build native binary (Linux/macOS/Windows)
-./gradlew linkReleaseExecutableNative
-# Artifact: build/bin/native/releaseExecutable/mckli.kexe
+Alternatively, build it from source:
+
+```bash
+./gradlew distZip
+# Artifact: build/distributions/mckli-1.0-SNAPSHOT.zip
 ```
 
 ### 2. Basic Usage
