@@ -70,14 +70,19 @@ class MockSseServer(private val port: Int = 8081) {
                         call.response.cacheControl(CacheControl.NoCache(null))
                         call.response.header(HttpHeaders.ContentType, "text/event-stream")
                         call.response.header(HttpHeaders.Connection, "keep-alive")
-
-                        // If session endpoint is configured, send it immediately
-                        sessionEndpoint?.let { endpoint ->
-                            sendEvent(SseEvent(event = "endpoint", data = endpoint))
-                        }
-
+                        
+                        // Start SSE stream by writing a comment or initial retry
                         call.respondTextWriter(contentType = ContentType.Text.EventStream) {
-                            // Keep connection alive and send events
+                            write(": connected\n\n")
+                            flush()
+
+                            // If session endpoint is configured, send it immediately
+                            sessionEndpoint?.let { endpoint ->
+                                val event = SseEvent(event = "endpoint", data = endpoint)
+                                val formatted = formatEvent(event)
+                                write(formatted)
+                                flush()
+                            }
                             try {
                                 while (true) {
                                     val event = withTimeout(30000) {
@@ -110,6 +115,10 @@ class MockSseServer(private val port: Int = 8081) {
                 post("/messages/") {
                     requestCount["/messages/"] = requestCount.getOrDefault("/messages/", 0) + 1
                     handlePostRequest(call)
+                }
+
+                get("/health") {
+                    call.respond(HttpStatusCode.OK, "OK")
                 }
             }
         }.start(wait = false)
@@ -213,17 +222,7 @@ class MockSseServer(private val port: Int = 8081) {
     }
 
     fun sendEvent(event: SseEvent) {
-        val formatted = buildString {
-            event.id?.let { appendLine("id: $it") }
-            event.event?.let { appendLine("event: $it") }
-            event.retry?.let { appendLine("retry: $it") }
-
-            // Handle multi-line data
-            event.data.lines().forEach { line ->
-                appendLine("data: $line")
-            }
-            appendLine() // Empty line marks end of event
-        }
+        val formatted = formatEvent(event)
 
         sseChannels.values.forEach { channel ->
             scope.launch {
@@ -233,6 +232,20 @@ class MockSseServer(private val port: Int = 8081) {
                     // Channel closed
                 }
             }
+        }
+    }
+
+    private fun formatEvent(event: SseEvent): String {
+        return buildString {
+            event.id?.let { appendLine("id: $it") }
+            event.event?.let { appendLine("event: $it") }
+            event.retry?.let { appendLine("retry: $it") }
+
+            // Handle multi-line data
+            event.data.lines().forEach { line ->
+                appendLine("data: $line")
+            }
+            appendLine() // Empty line marks end of event
         }
     }
 

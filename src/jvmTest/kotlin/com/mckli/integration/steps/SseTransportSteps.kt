@@ -1,19 +1,32 @@
 package com.mckli.integration.steps
 
-import com.mckli.config.Configuration
 import com.mckli.client.RequestRouter
 import com.mckli.config.ConfigManager
+import com.mckli.config.Configuration
 import com.mckli.config.ServerConfig
 import com.mckli.config.TransportType.SSE
+import com.mckli.daemon.DaemonHttpClient
 import com.mckli.daemon.DaemonProcess
 import com.mckli.integration.support.MockSseServer
 import com.mckli.integration.support.TestConfiguration
 import com.mckli.transport.SseTransport
 import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
-import kotlinx.serialization.json.*
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonArray
 import java.io.File
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class SseTransportSteps : En {
     private val mockServer = MockSseServer(port = 8081)
@@ -45,7 +58,8 @@ class SseTransportSteps : En {
 
         Before("@requires-sse-server") { ->
             mockServer.start()
-            Thread.sleep(500) // Give server time to start
+            mockServer.setResponding(true)
+            waitForServerStart(8081)
         }
 
         After("@requires-sse-server") { ->
@@ -78,7 +92,7 @@ class SseTransportSteps : En {
                 name = serverName,
                 endpoint = "http://localhost:8081/sse",
                 transport = SSE,
-                timeout = 5000,
+                timeout = 10000,
                 poolSize = 10
             )
             serverConfigs[serverName] = config
@@ -107,7 +121,7 @@ class SseTransportSteps : En {
                 name = serverName,
                 endpoint = "http://localhost:8081/sse",
                 transport = SSE,
-                timeout = 5000,
+                timeout = 10000,
                 poolSize = 10
             )
             serverConfigs[serverName] = config
@@ -125,21 +139,18 @@ class SseTransportSteps : En {
 
             val result = daemon.start()
             assertTrue(result.isSuccess, "Failed to start daemon: ${result.exceptionOrNull()?.message}")
-            // Wait for socket to be created
-            val socketFile = File(daemon.getSocketPath())
-            var count = 0
-            while (!socketFile.exists() && count < 50) {
-                Thread.sleep(100)
-                count++
-            }
-            assertTrue(socketFile.exists(), "Daemon socket file was not created at ${daemon.getSocketPath()}")
+
+            // Wait for daemon to initialize and connect to downstream SSE server
+            waitForDaemonConnection(serverName)
         }
 
         Given("the SSE server provides a dynamic POST endpoint {string}") { endpoint: String ->
-            mockServer.sendEvent(MockSseServer.SseEvent(
-                event = "endpoint",
-                data = endpoint
-            ))
+            mockServer.sendEvent(
+                MockSseServer.SseEvent(
+                    event = "endpoint",
+                    data = endpoint
+                )
+            )
             // Give some time for the client to receive the event
             Thread.sleep(200)
         }
@@ -158,19 +169,19 @@ class SseTransportSteps : En {
             var lastResult: Result<JsonElement>? = null
             var lastErr: Throwable? = null
 
-            // Retry for up to 60 seconds to allow the daemon to connect to SSE
-            for (i in 1..60) {
+            // Retry for up to 10 seconds to allow the daemon to connect to SSE
+            for (i in 1..10) {
                 val router = RequestRouter(serverName)
                 val result = router.listTools(null)
                 if (result.isSuccess) {
                     val list = result.getOrNull()?.jsonArray
-                    if (list != null && list.isNotEmpty()) {
+                    if (!list.isNullOrEmpty()) {
                         lastResult = result
                         break
                     }
                 }
                 lastErr = result.exceptionOrNull()
-                if (i % 5 == 0) {
+                if (i % 2 == 0) {
                     println("[DEBUG_LOG] Retry $i: Failed to list tools: ${lastErr?.message}")
                     // Trigger a refresh if it's connected but cache is empty or stale
                     if (lastErr?.message?.contains("SSE transport not connected") == false) {
@@ -217,7 +228,7 @@ class SseTransportSteps : En {
                 name = serverName,
                 endpoint = "http://localhost:8081/sse",
                 transport = SSE,
-                timeout = 5000,
+                timeout = 10000,
                 poolSize = 10
             )
             serverConfigs[serverName] = config
@@ -230,7 +241,9 @@ class SseTransportSteps : En {
 
             val result = daemon.start()
             assertTrue(result.isSuccess, "Failed to start daemon: ${result.exceptionOrNull()?.message}")
-            Thread.sleep(2000) // Give more time for SSE connection
+
+            // Wait for Unified Daemon to start and connect
+            waitForDaemonConnection(serverName)
 
             // Verify connection is established
             mockServer.waitForConnection(5000)
@@ -299,25 +312,31 @@ class SseTransportSteps : En {
 
 
             val startTime = System.currentTimeMillis()
-            val maxWait = 15000L
+            val maxWait = 20000L
 
-            var errorMessage: String? = null
+            var lastErrorMsg: String? = null
             while ((System.currentTimeMillis() - startTime) < maxWait) {
                 try {
                     val result = daemon.stop(force = false)
-                    errorMessage = result.exceptionOrNull()?.message
-                    if (errorMessage == "Daemon not running") {
-                        errorMessage = null
+                    if (result.isSuccess) {
+                        lastErrorMsg = null
                         break
                     }
-                    assertTrue(result.isSuccess)
-                } catch (_: AssertionError) {
-                    Thread.sleep(200)
+                    lastErrorMsg = result.exceptionOrNull()?.message
+                    if (lastErrorMsg == "Daemon not running") {
+                        lastErrorMsg = null
+                        break
+                    }
+                } catch (e: Exception) {
+                    lastErrorMsg = e.message
                 }
+                Thread.sleep(500)
             }
-            if (errorMessage != null) {
-                throw AssertionError("Daemon did not stop within ${System.currentTimeMillis() - startTime}ms: $errorMessage")
+            if (lastErrorMsg != null) {
+                throw AssertionError("Daemon did not stop within ${System.currentTimeMillis() - startTime}ms: $lastErrorMsg")
             }
+            // Give extra time for the UnifiedDaemon to really stop everything
+            Thread.sleep(3000)
         }
 
         Then("the SSE connection should be closed gracefully") {
@@ -349,6 +368,55 @@ class SseTransportSteps : En {
             val daemon = daemons[serverName]
                 ?: throw IllegalStateException("Daemon not found for $serverName")
             assertTrue(daemon.isRunning(), "Daemon for $serverName should be running")
+        }
+    }
+
+    private fun waitForDaemonConnection(serverName: String, timeoutMs: Long = 20000L) {
+        runBlocking {
+            val client = DaemonHttpClient()
+            var lastStatus: String? = null
+            try {
+                withTimeout(timeoutMs.milliseconds) {
+                    while (true) {
+                        val healthResult = client.getHealth(serverName)
+                        if (healthResult.isSuccess) {
+                            return@withTimeout
+                        } else {
+                            lastStatus = healthResult.exceptionOrNull()?.message
+                        }
+                        delay(500.milliseconds)
+                    }
+                }
+            } catch (e: Exception) {
+                throw AssertionError(
+                    "Daemon did not connect to SSE server $serverName within ${timeoutMs}ms. Last status: $lastStatus",
+                    e
+                )
+            } finally {
+                client.close()
+            }
+        }
+    }
+
+    private fun waitForServerStart(port: Int, timeoutMs: Long = 10000L) {
+        runBlocking {
+            val client = HttpClient(CIO)
+            val startTime = System.currentTimeMillis()
+            var started = false
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                try {
+                    val response = client.get("http://localhost:$port/health")
+                    if (response.status == HttpStatusCode.OK) {
+                        started = true
+                        break
+                    }
+                } catch (e: Exception) {
+                    // Ignore and retry
+                }
+                delay(100.milliseconds)
+            }
+            client.close()
+            assertTrue(started, "Mock SSE server did not start on port $port within ${timeoutMs}ms")
         }
     }
 

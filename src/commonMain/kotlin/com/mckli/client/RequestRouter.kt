@@ -2,9 +2,6 @@ package com.mckli.client
 
 import com.mckli.config.ConfigManager
 import com.mckli.config.ServerConfig
-import com.mckli.daemon.DaemonProcess
-import com.mckli.ipc.IpcRequest
-import com.mckli.ipc.IpcResponse
 import kotlinx.serialization.json.JsonElement
 import java.util.UUID
 

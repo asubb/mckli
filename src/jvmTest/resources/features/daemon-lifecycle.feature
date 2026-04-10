@@ -1,7 +1,7 @@
-Feature: Daemon Lifecycle Management
+Feature: Unified Daemon Lifecycle Management
   As a user
-  I want to manage daemon processes
-  So that I can maintain persistent connections to MCP servers
+  I want to manage the unified daemon process
+  So that I can maintain persistent connections to all MCP servers
 
   Background:
     Given a clean daemon directory
@@ -9,29 +9,23 @@ Feature: Daemon Lifecycle Management
 
   @requires-mock-server
   Scenario: Basic daemon lifecycle
-    When I start the daemon for server "testserver"
-    Then the daemon for "testserver" should be running
-    When I restart the daemon for "testserver"
-    Then the daemon for "testserver" should be running
-    When I stop the daemon for "testserver"
-    Then the daemon for "testserver" should not be running
+    When I start the unified daemon
+    Then the unified daemon should be running
+    And logs should not have any errors
+    When I restart the unified daemon
+    Then the unified daemon should be running
+    And logs should not have any errors
+    When I stop the unified daemon
+    Then the unified daemon should not be running
 
   @requires-mock-server
   Scenario: Check daemon status
-    Given the daemon for server "testserver" is running
+    Given the unified daemon is running
     When I check daemon status
-    Then I should see "testserver" is RUNNING
+    Then I should see the unified daemon is RUNNING
 
   @requires-mock-server
   Scenario: Auto-start daemon on first request
-    When I send a tools list request to "testserver"
-    Then the daemon for "testserver" should be running
+    When I list tools for server "testserver"
+    Then the unified daemon should be running
     And the request should complete successfully
-
-  @requires-mock-server
-  Scenario: Running multiple daemons
-    Given a server "server1" exists with endpoint "http://localhost:8081/api"
-    And a server "server2" exists with endpoint "http://localhost:8082/api"
-    When I start the daemon for server "server1"
-    And I start the daemon for server "server2"
-    Then both daemons for "server1" and "server2" should be running

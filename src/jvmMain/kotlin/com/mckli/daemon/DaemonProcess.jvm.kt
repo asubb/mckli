@@ -10,22 +10,22 @@ private val log = KotlinLogging.logger {  }
 actual class DaemonProcess actual constructor(private val config: ServerConfig) {
     private val configManager = ConfigManager()
     private val daemonsDir = File(configManager.getDaemonsPath())
-    private val pidFile = File(daemonsDir, "${config.name}.pid")
-    private val socketPath = File(daemonsDir, "${config.name}.sock").absolutePath
+    private val pidFile = File(daemonsDir, "daemon.pid")
+    private val logFile = File(daemonsDir, "daemon.log")
+    private val errFile = File(daemonsDir, "daemon.err")
 
     init {
         if (!daemonsDir.exists()) {
             daemonsDir.mkdirs()
         }
-        cleanupStaleSocket()
-        log.info { "Initialized daemon process for '${config.name}', daemon directory: ${daemonsDir.absolutePath}" }
+        log.info { "Initialized unified daemon process, daemon directory: ${daemonsDir.absolutePath}" }
     }
 
     actual fun start(): Result<Unit> {
         return try {
             // Check if already running
             if (isRunning()) {
-                return Result.failure(DaemonException("Daemon for '${config.name}' is already running"))
+                return Result.success(Unit)
             }
 
             // Clean up old PID file
@@ -44,23 +44,21 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             System.getProperty("mckli.daemons.dir")?.let { args.add("-Dmckli.daemons.dir=$it") }
             
             args.add("-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}")
-            args.add("-DDAEMON_NAME=${config.name}")
+            args.add("-DDAEMON_NAME=unified")
             args.add("com.mckli.daemon.DaemonMainKt")
-            args.add(config.name)
 
-            println("[DEBUG_LOG] Spawning daemon: ${args.joinToString(" ")}")
+            println("[DEBUG_LOG] Spawning unified daemon: ${args.joinToString(" ")}")
             val processBuilder = ProcessBuilder(args)
 
-            // Keep existing redirection for stdout/stderr as fallback/main output
-            processBuilder.redirectOutput(File(daemonsDir, "${config.name}.log"))
-            processBuilder.redirectError(File(daemonsDir, "${config.name}.err"))
+            processBuilder.redirectOutput(logFile)
+            processBuilder.redirectError(errFile)
 
             val process = processBuilder.start()
 
             // Wait briefly to ensure process started
             var waited = 0L
             val waitStep = 100L
-            val maxWait = 5000L // 5 seconds is plenty for a local process to fail if it's going to
+            val maxWait = 5000L
             
             while (waited < maxWait) {
                 Thread.sleep(waitStep)
@@ -70,14 +68,38 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
 
             if (!process.isAlive) {
                 val exitCode = process.exitValue()
-                println("[DEBUG_LOG] Daemon process for '${config.name}' exited early with code $exitCode")
-                // For our tests, any early exit is a failure, even if code is 0 (which shouldn't happen for errors)
                 return Result.failure(DaemonException("Daemon failed to start (exit code: $exitCode)"))
             }
 
             // Write PID file
+            // Let the daemon write its own PID file or do it here
             val pid = process.pid()
             pidFile.writeText(pid.toString())
+
+            // Wait for HTTP server to be ready
+            var ready = false
+            val httpClient = java.net.http.HttpClient.newHttpClient()
+            val request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create("http://127.0.0.1:5030/health"))
+                .GET()
+                .build()
+
+            for (i in 1..50) {
+                try {
+                    val response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString())
+                    if (response.statusCode() == 200) {
+                        ready = true
+                        break
+                    }
+                } catch (e: Exception) {
+                    // Ignore and retry
+                }
+                Thread.sleep(200)
+            }
+
+            if (!ready) {
+                log.warn { "Daemon HTTP server not ready after timeout" }
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -150,18 +172,10 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
     }
 
     actual fun getSocketPath(): String {
-        return socketPath
+        return pidFile.parentFile.absolutePath + "/daemon.sock" // Not used for connection anymore, but kept for tests/compatibility
     }
 
     private fun cleanup() {
         pidFile.delete()
-        File(socketPath).delete()
-    }
-
-    private fun cleanupStaleSocket() {
-        val socketFile = File(socketPath)
-        if (socketFile.exists() && !isRunning()) {
-            socketFile.delete()
-        }
     }
 }

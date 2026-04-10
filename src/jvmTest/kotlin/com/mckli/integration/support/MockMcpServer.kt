@@ -104,6 +104,7 @@ class MockMcpServer(val port: Int = 8080) {
         error: String? = null,
         delayMs: Long = 0
     ) {
+        isResponding.set(true)
         println("[DEBUG_LOG] MockMcpServer: Adding tool '$name' (error=$error, delay=$delayMs)")
         // Remove existing tool with same name to avoid duplicates in this list-backed mock
         tools.removeIf { it.name == name }

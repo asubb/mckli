@@ -15,6 +15,9 @@ kotlin {
         testRuns.named("test") {
             executionTask.configure {
                 useJUnitPlatform()
+                testLogging {
+                    showStandardStreams = true
+                }
             }
         }
         @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
@@ -79,6 +82,9 @@ kotlin {
             dependencies {
                 implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
                 implementation("ch.qos.logback:logback-classic:1.5.6")
+                implementation("io.ktor:ktor-server-core:2.3.12")
+                implementation("io.ktor:ktor-server-netty:2.3.12")
+                implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
             }
         }
         val jvmTest by getting {

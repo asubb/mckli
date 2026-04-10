@@ -153,16 +153,22 @@ class ToolSteps : En {
 
         When("I list tools from {string}") { serverName: String ->
             try {
+                // Use a loop to wait for tools to be discovered
+                var attempts = 0
                 val router = RequestRouter(serverName)
-                val result = router.listTools(null)
-                result.fold(
-                    onSuccess = { jsonElement ->
-                        toolListResult = Json.decodeFromJsonElement(jsonElement)
-                    },
-                    onFailure = { error ->
-                        lastError = error.message
+                while (attempts < 10) {
+                    val result = router.listTools(null)
+                    val tools = result.getOrNull()
+                    if (result.isSuccess && tools is JsonArray && tools.isNotEmpty()) {
+                        toolListResult = Json.decodeFromJsonElement(tools)
+                        break
                     }
-                )
+                    Thread.sleep(1000)
+                    attempts++
+                }
+                if (toolListResult == null) {
+                    throw AssertionError("Tools not discovered from $serverName within 10 seconds")
+                }
             } catch (e: Exception) {
                 lastError = e.message
             }
@@ -170,16 +176,22 @@ class ToolSteps : En {
 
         When("I list tools from {string} with filter {string}") { serverName: String, filter: String ->
             try {
+                // Use a loop to wait for tools to be discovered
+                var attempts = 0
                 val router = RequestRouter(serverName)
-                val result = router.listTools(filter)
-                result.fold(
-                    onSuccess = { jsonElement ->
-                        toolListResult = Json.decodeFromJsonElement(jsonElement)
-                    },
-                    onFailure = { error ->
-                        lastError = error.message
+                while (attempts < 10) {
+                    val result = router.listTools(filter)
+                    val tools = result.getOrNull()
+                    if (result.isSuccess && tools is JsonArray && tools.isNotEmpty()) {
+                        toolListResult = Json.decodeFromJsonElement(tools)
+                        break
                     }
-                )
+                    Thread.sleep(1000)
+                    attempts++
+                }
+                if (toolListResult == null) {
+                    throw AssertionError("Tools with filter '$filter' not discovered from $serverName within 10 seconds")
+                }
             } catch (e: Exception) {
                 lastError = e.message
             }
@@ -187,6 +199,8 @@ class ToolSteps : En {
 
         When("I describe tool {string} from {string}") { toolName: String, serverName: String ->
             try {
+                // Give some time for daemon to start and initialize
+                Thread.sleep(2000)
                 val router = RequestRouter(serverName)
                 val result = router.describeTool(toolName)
                 result.fold(
@@ -239,10 +253,18 @@ class ToolSteps : En {
         }
 
         When("I list tools from {string} again") { serverName: String ->
+            // Use a loop to wait for tools to be refreshed/available
+            var attempts = 0
             val router = RequestRouter(serverName)
-            val result = router.listTools(null)
-            result.getOrNull()?.let { jsonElement ->
-                toolListResult = Json.decodeFromJsonElement(jsonElement)
+            while (attempts < 10) {
+                val result = router.listTools(null)
+                val tools = result.getOrNull()
+                if (result.isSuccess && tools is JsonArray && tools.isNotEmpty()) {
+                    toolListResult = Json.decodeFromJsonElement(tools)
+                    break
+                }
+                Thread.sleep(1000)
+                attempts++
             }
         }
 
@@ -334,6 +356,12 @@ class ToolSteps : En {
             assertTrue(toolListResult!!.any { it.name == tool1 }, "Tool $tool1 not found")
             assertTrue(toolListResult!!.any { it.name == tool2 }, "Tool $tool2 not found")
             assertFalse(toolListResult!!.any { it.name == tool3 }, "Tool $tool3 should not be visible")
+        }
+
+        Then("I should see tool {string} and not {string}") { tool1: String, tool2: String ->
+            assertNotNull(toolListResult)
+            assertTrue(toolListResult!!.any { it.name == tool1 }, "Tool $tool1 not found")
+            assertFalse(toolListResult!!.any { it.name == tool2 }, "Tool $tool2 should not be visible")
         }
 
         Then("I should see tools with names containing {string}") { query: String ->

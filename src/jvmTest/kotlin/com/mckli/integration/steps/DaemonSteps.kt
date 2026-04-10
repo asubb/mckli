@@ -1,5 +1,6 @@
 package com.mckli.integration.steps
 
+import com.mckli.client.RequestRouter
 import com.mckli.config.ConfigManager
 import com.mckli.config.ServerConfig
 import com.mckli.config.Configuration
@@ -7,34 +8,53 @@ import com.mckli.daemon.DaemonProcess
 import com.mckli.integration.support.TestConfiguration
 import io.cucumber.java8.En
 import java.io.File
+import java.net.ServerSocket
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DaemonSteps : En {
-    private val daemons = mutableMapOf<String, DaemonProcess>()
-    private val pidsBefore = mutableMapOf<String, Int?>()
-    private var lastOperationResult: Result<Unit> = Result.success(Unit)
+    private var daemon: DaemonProcess? = null
+    private var lastPid: Int? = null
+    private var lastOperationResult: Result<Any?> = Result.success(Unit)
     private var statusOutput: String = ""
+    private var lastError: String? = null
 
     init {
-        Before { ->
+        Before { scenario ->
+            println("[DEBUG_LOG] Starting scenario: ${scenario.name}")
             TestConfiguration.setup()
-            daemons.clear()
-            pidsBefore.clear()
+            daemon = null
+            lastPid = null
         }
 
-        After { ->
-            // Clean up any running daemons
-            daemons.values.forEach { daemon ->
-                try {
-                    if (daemon.isRunning()) {
-                        daemon.stop(force = true)
+        After { scenario ->
+            if (scenario.isFailed) {
+                println("[DEBUG_LOG] Scenario failed: ${scenario.name}")
+                val daemonsDir = File(TestConfiguration.tempDir, "daemons")
+                daemonsDir.listFiles()?.forEach { file ->
+                    val fileName = file.name
+                    if (file.exists()) {
+                        println("[DEBUG_LOG] --- $fileName ---")
+                        file.readLines().forEach { println("[DEBUG_LOG] $it") }
+                        println("[DEBUG_LOG] --- end of $fileName ---")
+                    } else {
+                        println("[DEBUG_LOG] --- $fileName ---")
+                        println("<<EMPTY>>")
+                        println("[DEBUG_LOG] --- end of $fileName ---")
                     }
-                } catch (e: Exception) {
-                    // Ignore cleanup errors
                 }
+            }
+
+            // Clean up unified daemon
+            try {
+                val d = getUnifiedDaemon()
+                if (d.isRunning()) {
+                    d.stop(force = true)
+                }
+            } catch (e: Exception) {
+                // Ignore cleanup errors
             }
         }
 
@@ -42,111 +62,143 @@ class DaemonSteps : En {
             cleanDaemonDirectory()
         }
 
-        Given("the daemon for server {string} is running") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            if (!daemon.isRunning()) {
-                val result = daemon.start()
-                assertTrue(result.isSuccess, "Failed to start daemon: ${result.exceptionOrNull()?.message}")
-                Thread.sleep(1000) // Give daemon time to initialize
+        Given("the unified daemon is running") {
+            val d = getUnifiedDaemon()
+            if (!d.isRunning()) {
+                val result = d.start()
+                assertTrue(result.isSuccess, "Failed to start unified daemon: ${result.exceptionOrNull()?.message}")
+                Thread.sleep(2000) // Give daemon time to initialize
             }
         }
 
-        When("I start the daemon for server {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            lastOperationResult = daemon.start()
-            Thread.sleep(1000) // Give daemon time to initialize
+        Given("the daemon for server {string} is running") { serverName: String ->
+            val d = getUnifiedDaemon()
+            if (!d.isRunning()) {
+                d.start()
+                Thread.sleep(2000)
+            }
         }
 
-        When("I try to start the daemon for server {string}") { serverName: String ->
+        When("I start the unified daemon") {
+            val d = getUnifiedDaemon()
+            lastOperationResult = d.start()
+            Thread.sleep(2000)
+        }
+
+        When("I start the daemon for server {string}") { serverName: String ->
+            val d = getUnifiedDaemon()
+            lastOperationResult = d.start()
+            Thread.sleep(2000)
+        }
+
+        When("I try to start the unified daemon") {
             try {
-                val daemon = getDaemonForServer(serverName)
-                lastOperationResult = daemon.start()
-                
-                // If it's the nonexistent test, and it incorrectly succeeded,
-                // we'll try to use it to see if it's really working.
-                if (serverName == "nonexistent" && lastOperationResult.isSuccess) {
-                    val router = com.mckli.client.RequestRouter(serverName)
-                    val result = router.listTools(null)
-                    if (result.isFailure) {
-                        lastOperationResult = Result.failure(com.mckli.daemon.DaemonException("Daemon for nonexistent server is not responsive: ${result.exceptionOrNull()?.message}"))
-                    }
-                }
+                val d = getUnifiedDaemon()
+                lastOperationResult = d.start()
             } catch (e: Exception) {
                 lastOperationResult = Result.failure(e)
             }
         }
 
-        When("I stop the daemon for {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            lastOperationResult = daemon.stop(force = false)
-            Thread.sleep(500) // Give time for cleanup
+        When("I stop the unified daemon") {
+            val d = getUnifiedDaemon()
+            lastOperationResult = d.stop(force = false)
+            Thread.sleep(500)
         }
 
-        When("I restart the daemon for {string}") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            pidsBefore[serverName] = daemon.getPid()
+        When("I stop the daemon for {string}") { serverName: String ->
+            val d = getUnifiedDaemon()
+            lastOperationResult = d.stop(force = false)
+            Thread.sleep(500)
+        }
 
-            val stopResult = daemon.stop(force = false)
+        When("I restart the unified daemon") {
+            val d = getUnifiedDaemon()
+            lastPid = d.getPid()
+
+            val stopResult = d.stop(force = false)
             assertTrue(stopResult.isSuccess)
             Thread.sleep(500)
 
-            lastOperationResult = daemon.start()
-            Thread.sleep(1000)
+            lastOperationResult = d.start()
+            Thread.sleep(2000)
         }
 
         When("I check daemon status") {
-            statusOutput = buildString {
-                daemons.forEach { (name, daemon) ->
-                    val status = if (daemon.isRunning()) "RUNNING" else "STOPPED"
-                    appendLine("$name: $status (PID: ${daemon.getPid()})")
+            val d = getUnifiedDaemon()
+            val isRunning = d.isRunning()
+            val status = if (isRunning) "RUNNING" else "STOPPED"
+            statusOutput = "Unified daemon: $status (PID: ${d.getPid()})"
+        }
+
+        When("I list tools for server {string}") { serverName: String ->
+            // Use a loop to wait for tools to be discovered, as auto-refresh might take a moment
+            val router = RequestRouter(serverName)
+            var attempts = 0
+            var tools: Any? = null
+            while (attempts < 10) {
+                lastOperationResult = router.listTools(null)
+                tools = lastOperationResult.getOrNull()
+                if (lastOperationResult.isSuccess && tools is kotlinx.serialization.json.JsonArray && tools.isNotEmpty()) {
+                    break
                 }
-            }
-        }
-
-        When("I send a tools list request to {string}") { serverName: String ->
-            // This would trigger auto-start
-            val daemon = getDaemonForServer(serverName)
-            if (!daemon.isRunning()) {
-                lastOperationResult = daemon.start()
                 Thread.sleep(1000)
+                attempts++
+            }
+            if (lastOperationResult.isFailure) {
+                lastError = lastOperationResult.exceptionOrNull()?.message
             }
         }
 
-        Then("the daemon for {string} should be running") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            assertTrue(daemon.isRunning(), "Daemon for $serverName should be running")
+        Then("the unified daemon should be running") {
+            val d = getUnifiedDaemon()
+            assertTrue(d.isRunning(), "Unified daemon should be running")
         }
 
-        Then("the daemon for {string} should not be running") { serverName: String ->
-            val daemon = getDaemonForServer(serverName)
-            assertFalse(daemon.isRunning(), "Daemon for $serverName should not be running")
+        Then("the unified daemon should not be running") {
+            val d = getUnifiedDaemon()
+            assertFalse(d.isRunning(), "Unified daemon should not be running")
         }
 
-        Then("I should see {string} is RUNNING") { serverName: String ->
-            assertTrue(statusOutput.contains("$serverName: RUNNING"))
+        Then("I should see the unified daemon is RUNNING") {
+            assertTrue(statusOutput.contains("Unified daemon: RUNNING"))
         }
 
         Then("the request should complete successfully") {
-            assertTrue(lastOperationResult.isSuccess, "Request should succeed")
+            val error = lastOperationResult.exceptionOrNull()?.message ?: lastError
+            assertTrue(lastOperationResult.isSuccess, "Request should succeed. Error: $error")
         }
 
-        Then("both daemons for {string} and {string} should be running") { name1: String, name2: String ->
-            val daemon1 = getDaemonForServer(name1)
-            val daemon2 = getDaemonForServer(name2)
-            assertTrue(daemon1.isRunning(), "Daemon for $name1 should be running")
-            assertTrue(daemon2.isRunning(), "Daemon for $name2 should be running")
+        Then("logs should not have any errors") {
+            val daemonsDir = File(TestConfiguration.tempDir, "daemons")
+            
+            // Check stderr file
+            val errFile = File(daemonsDir, "daemon.err")
+            if (errFile.exists()) {
+                val errors = errFile.readLines().filter { line ->
+                    line.isNotBlank() && !line.startsWith("WARNING:")
+                }
+                assertTrue(errors.isEmpty(), "Daemon stderr should be empty (excluding warnings), but contains:\n${errors.joinToString("\n")}")
+            }
+
+            // Check logback file
+            val logFile = File(daemonsDir, "mckli-daemon-unified.log")
+            if (logFile.exists()) {
+                val errorLines = logFile.readLines().filter { line ->
+                    line.contains(" ERROR ")
+                }
+                assertTrue(errorLines.isEmpty(), "Daemon log file should not contain ERROR entries, but found:\n${errorLines.joinToString("\n")}")
+            }
         }
     }
 
-    private fun getDaemonForServer(serverName: String): DaemonProcess {
-        return daemons.getOrPut(serverName) {
-            val configManager = ConfigManager()
-            val config = configManager.readConfig()
-            val serverConfig = config?.servers?.find { it.name == serverName }
-                ?: ServerConfig(name = serverName, endpoint = "http://localhost:8080/api")
-
-            DaemonProcess(serverConfig)
+    private fun getUnifiedDaemon(): DaemonProcess {
+        if (daemon == null) {
+            val port = ServerSocket(0).use { it.localPort }
+            val dummyConfig = ServerConfig(name = "daemon", endpoint = "http://localhost:$port")
+            daemon = DaemonProcess(dummyConfig)
         }
+        return daemon!!
     }
 
     private fun cleanDaemonDirectory() {

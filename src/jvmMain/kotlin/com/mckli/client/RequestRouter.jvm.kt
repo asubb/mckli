@@ -2,50 +2,60 @@ package com.mckli.client
 
 import com.mckli.config.ConfigManager
 import com.mckli.daemon.DaemonProcess
-import com.mckli.ipc.IpcRequest
-import com.mckli.ipc.IpcResponse
-import com.mckli.ipc.UnixSocketClient
+import com.mckli.daemon.DaemonHttpClient
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 
 private val logger = KotlinLogging.logger {}
 
 actual class RequestRouter actual constructor(private val serverName: String?) {
     private val configManager = ConfigManager()
+    private val daemonClient = DaemonHttpClient()
 
     actual fun sendMcpRequest(method: String, params: JsonElement?): Result<JsonElement> {
-        return executeRequest { socketPath, requestId ->
-            IpcRequest.McpRequest(requestId, method, params)
-        }
+        return Result.failure(RouterException("Direct MCP requests not supported via HTTP API yet"))
     }
 
     actual fun listTools(filter: String?): Result<JsonElement> {
-        return executeRequest { _, requestId ->
-            IpcRequest.ListTools(requestId, filter)
+        return executeRequest { serverName ->
+            daemonClient.listTools(serverName, filter).map { 
+                kotlinx.serialization.json.Json.encodeToJsonElement(
+                    ListSerializer(com.mckli.tools.ToolMetadata.serializer()),
+                    it
+                )
+            }
         }
     }
 
     actual fun describeTool(toolName: String): Result<JsonElement> {
-        return executeRequest { _, requestId ->
-            IpcRequest.DescribeTool(requestId, toolName)
+        return executeRequest { serverName ->
+             daemonClient.listTools(serverName).map { tools ->
+                val tool = tools.find { it.name == toolName }
+                if (tool != null) {
+                    kotlinx.serialization.json.Json.encodeToJsonElement(com.mckli.tools.ToolMetadata.serializer(), tool)
+                } else {
+                    throw RouterException("Tool $toolName not found")
+                }
+            }
         }
     }
 
     actual fun callTool(toolName: String, arguments: JsonElement?): Result<JsonElement> {
-        return executeRequest { _, requestId ->
-            IpcRequest.CallTool(requestId, toolName, arguments)
+        return executeRequest { serverName ->
+            daemonClient.callTool(serverName, toolName, arguments)
         }
     }
 
     actual fun refreshTools(): Result<String> {
-        return executeRequest<JsonElement> { _, requestId ->
-            IpcRequest.RefreshTools(requestId)
-        }.map { it.toString() }
+        return executeRequest { serverName ->
+            daemonClient.refreshTools(serverName)
+        }
     }
 
-    private fun <T : JsonElement> executeRequest(
-        requestBuilder: (String, String) -> IpcRequest
+    private fun <T> executeRequest(
+        block: suspend (String) -> Result<T>
     ): Result<T> = try {
         val serverConfig = getServerConfig(serverName, configManager)
         logger.debug { "Routing request to server: ${serverConfig.name}" }
@@ -53,41 +63,19 @@ actual class RequestRouter actual constructor(private val serverName: String?) {
 
         // Auto-start daemon if not running
         if (!daemon.isRunning()) {
-            logger.debug { "Daemon for ${serverConfig.name} is not running, auto-starting..." }
+            logger.debug { "Daemon is not running, auto-starting..." }
             daemon.start().onFailure { error ->
                 return Result.failure(RouterException("Failed to auto-start daemon: ${error.message}", error))
             }
 
             // Give daemon time to initialize
             logger.debug { "Waiting for daemon to initialize..." }
-            Thread.sleep(1000)
+            Thread.sleep(2000)
         }
 
-        val socketPath = daemon.getSocketPath()
-        val requestId = generateRequestId()
-
-        val request = requestBuilder(socketPath, requestId)
-        logger.debug { "Building IPC request with id: $requestId" }
-        val client = UnixSocketClient(socketPath)
-
-        client.sendRequest(request).fold(
-            onSuccess = { response ->
-                logger.debug { "Received response from daemon for request: $requestId" }
-                when (response) {
-                    is IpcResponse.Success -> Result.success(response.result as T)
-                    is IpcResponse.Error -> {
-                        logger.debug { "Daemon returned error for request $requestId: ${response.error}" }
-                        Result.failure(
-                            RouterException("Request failed: ${response.error}\n${response.details ?: ""}")
-                        )
-                    }
-                }
-            },
-            onFailure = { error ->
-                logger.debug(error) { "IPC call failed for request: $requestId" }
-                Result.failure(RouterException("IPC failed: ${error.message}", error))
-            }
-        )
+        runBlocking {
+            block(serverConfig.name)
+        }
     } catch (e: Exception) {
         logger.error(e) { "Unexpected router error" }
         Result.failure(RouterException("Router error: ${e.message}", e))

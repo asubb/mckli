@@ -2,6 +2,9 @@ package com.mckli.daemon
 
 import com.mckli.config.ServerConfig
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+
 expect class DaemonProcess(config: ServerConfig) {
     fun start(): Result<Unit>
     fun stop(force: Boolean = false): Result<Unit>
@@ -10,13 +13,13 @@ expect class DaemonProcess(config: ServerConfig) {
     fun getSocketPath(): String
 }
 
+@Serializable
 data class DaemonStatus(
-    val serverName: String,
     val isRunning: Boolean,
     val pid: Int?,
-    val socketPath: String,
-    val connectionState: ConnectionState = ConnectionState.Unknown,
-    val lastError: String? = null
+    val managedServers: List<String> = emptyList(),
+    val connectionStates: Map<String, ConnectionState> = emptyMap(),
+    val lastErrors: Map<String, String?> = emptyMap()
 )
 
 enum class ConnectionState {

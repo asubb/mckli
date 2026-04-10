@@ -41,7 +41,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
     // SSE connection state
     private val _connectionState = MutableStateFlow<SseConnectionState>(SseConnectionState.Disconnected)
-    val connectionState: StateFlow<SseConnectionState> = _connectionState
+    override val connectionState: StateFlow<SseConnectionState> = _connectionState
 
     // Dynamic POST endpoint received from SSE
     private var postEndpoint = config.endpoint
@@ -80,7 +80,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
     /**
      * Establish SSE connection with automatic reconnection. Should be called before sending requests.
      */
-    suspend fun connect(): Result<Unit> {
+    override suspend fun connect(): Result<Unit> {
         if (isConnected.get()) {
             return Result.success(Unit)
         }
@@ -102,6 +102,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                         client.prepareGet(config.endpoint) {
                             header(HttpHeaders.Accept, "text/event-stream")
                             header(HttpHeaders.CacheControl, "no-cache")
+                            header(HttpHeaders.Connection, "keep-alive")
 
                             // Add authentication headers
                             config.auth?.let { auth ->
@@ -438,10 +439,3 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
     }
 }
 
-sealed class SseConnectionState {
-    object Disconnected : SseConnectionState()
-    object Connecting : SseConnectionState()
-    object Connected : SseConnectionState()
-    object Reconnecting : SseConnectionState()
-    data class Failed(val error: String) : SseConnectionState()
-}
