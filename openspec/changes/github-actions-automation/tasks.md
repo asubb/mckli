@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create `.github/workflows/ci.yml` file.
 - [x] 1.2 Define `ci` workflow to run on PRs and push to `main`.
-- [x] 1.3 Add job for JVM build and test (run `./gradlew build`).
+- [x] 1.3 Add job for JVM build and test (run `./gradlew jvmTest`).
 - [ ] 1.4 Add job for Native build and test (Deferred).
 - [x] 1.5 Configure test result publishing (e.g., using `action-junit-report`).
 
