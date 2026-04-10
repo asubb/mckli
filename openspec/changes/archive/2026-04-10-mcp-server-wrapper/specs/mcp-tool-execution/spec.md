@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: CLI tool invocation command
-The system SHALL provide `mckli tools call <server> <tool-name> [args]` command for invoking MCP tools.
+The system SHALL provide `mckli tools call [server] <tool-name> --json <args>` command for invoking MCP tools.
 
-#### Scenario: Call tool with arguments
-- **WHEN** user runs `mckli tools call myserver read-file --path /foo/bar.txt`
-- **THEN** CLI parses arguments, sends request to daemon, and displays tool result
+#### Scenario: Call tool with JSON arguments
+- **WHEN** user runs `mckli tools call myserver read-file --json '{"path": "/foo/bar.txt"}'`
+- **THEN** CLI parses JSON, sends request to daemon, and displays tool result
+
+#### Scenario: Call tool using default server
+- **WHEN** user runs `mckli tools call read-file --json '{"path": "/foo/bar.txt"}'` and a default server is configured
+- **THEN** CLI sends request to the default server's daemon
 
 #### Scenario: Call tool without arguments
 - **WHEN** user runs `mckli tools call myserver list-users` for tool requiring no parameters
@@ -57,10 +61,10 @@ The CLI SHALL validate argument types match parameter schema before sending requ
 - **THEN** CLI sends request to daemon
 
 ### Requirement: Tool execution via daemon
-The CLI SHALL send tool invocation requests to daemon via IPC with tool name and parsed arguments.
+The CLI SHALL send tool invocation requests to daemon via HTTP with tool name and arguments.
 
 #### Scenario: Successful tool execution
-- **WHEN** daemon receives valid tool request
+- **WHEN** daemon receives valid tool request via HTTP
 - **THEN** daemon forwards to MCP server, receives result, and returns to CLI
 
 #### Scenario: Tool execution error

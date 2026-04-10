@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Connection pool initialization
-Each daemon SHALL maintain a connection pool for HTTP connections to its assigned MCP server.
+The unified daemon SHALL maintain a connection pool for each configured MCP server instance.
 
 #### Scenario: Pool created on daemon start
-- **WHEN** daemon process starts
-- **THEN** connection pool is initialized with configured max size and idle timeout
+- **WHEN** daemon process starts or a new server is added
+- **THEN** a connection pool for each server is initialized with configured max size and idle timeout
 
 #### Scenario: Pool with custom size
 - **WHEN** MCP server configuration specifies custom pool size

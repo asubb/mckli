@@ -79,8 +79,8 @@ The system SHALL correlate MCP responses received via SSE stream with originatin
 
 #### Scenario: Match response to pending request
 - **WHEN** SSE event contains MCP response with request ID
-- **THEN** system SHALL locate pending IPC client request with matching ID
-- **THEN** system SHALL forward response to waiting client via Unix socket
+- **THEN** system SHALL locate pending client request with matching ID
+- **THEN** system SHALL forward response to waiting client via HTTP
 
 #### Scenario: Handle response without matching request
 - **WHEN** SSE event contains response with unknown request ID

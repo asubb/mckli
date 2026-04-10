@@ -27,15 +27,19 @@ The tool cache SHALL store tool name, description, input schema (JSON Schema for
 - **THEN** daemon stores tool name and description with null parameter schema
 
 ### Requirement: CLI command to list tools
-The system SHALL provide `mckli tools list <server>` command to display all available tools from a server.
+The system SHALL provide `mckli tools list [server]` command to display available tools.
 
 #### Scenario: List all tools
-- **WHEN** user runs `mckli tools list myserver`
-- **THEN** CLI connects to daemon and displays tool names with brief descriptions
+- **WHEN** user runs `mckli tools list` without a server name
+- **THEN** CLI displays tools from all configured servers, grouped by server
 
-#### Scenario: List tools from inactive daemon
-- **WHEN** user lists tools but daemon is not running
-- **THEN** CLI auto-starts daemon and returns tool list after cache is populated
+#### Scenario: List tools for a specific server
+- **WHEN** user runs `mckli tools list myserver`
+- **THEN** CLI connects to daemon and displays tool names from that server only
+
+#### Scenario: JSON output for tool listing
+- **WHEN** user runs `mckli tools list --json`
+- **THEN** CLI returns tools in structured JSON format
 
 #### Scenario: No tools available
 - **WHEN** server has no tools cached
@@ -68,15 +72,19 @@ The system SHALL provide `mckli tools refresh <server>` command to re-fetch tool
 - **THEN** daemon retains existing cache and returns error to CLI
 
 ### Requirement: Tool filtering and search
-The system SHALL support filtering tools by name pattern in list command.
+The system SHALL support searching and filtering tools across all servers.
 
-#### Scenario: Filter tools by prefix
-- **WHEN** user runs `mckli tools list myserver --filter "file*"`
-- **THEN** CLI displays only tools matching the pattern
+#### Scenario: Search for a keyword
+- **WHEN** user runs `mckli tools search <query>`
+- **THEN** CLI displays matching tools from all servers with previews
 
-#### Scenario: No matches for filter
-- **WHEN** filter pattern matches no tools
-- **THEN** CLI displays message indicating no matching tools
+#### Scenario: JSON output for tool search
+- **WHEN** user runs `mckli tools search <query> --json`
+- **THEN** CLI returns search results in structured JSON format
+
+#### Scenario: Filter tools by name or description
+- **WHEN** user runs `mckli tools list --filter "keyword"`
+- **THEN** CLI displays only tools where name or description matches the keyword
 
 ### Requirement: Tool cache persistence
 Tool cache SHALL be memory-only and not persisted to disk between daemon restarts.

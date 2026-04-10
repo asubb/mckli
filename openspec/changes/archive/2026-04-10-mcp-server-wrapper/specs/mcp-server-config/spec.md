@@ -16,26 +16,30 @@ The system SHALL store MCP server configuration in `~/.config/mckli/servers.json
 - **THEN** system creates empty configuration with default structure
 
 ### Requirement: Server configuration schema
-Each MCP server configuration SHALL include name, endpoint URL, authentication settings, and connection parameters.
+Each MCP server configuration SHALL include name, endpoint URL, transport type, authentication settings, and connection parameters.
 
 #### Scenario: Complete server config
 - **WHEN** user defines server with all parameters
-- **THEN** config includes name, endpoint, auth type, credentials, timeout, and pool size
+- **THEN** config includes name, endpoint, transport (HTTP or SSE), auth type, credentials, timeout, and pool size
 
 #### Scenario: Minimal server config
 - **WHEN** user defines server with only name and endpoint
-- **THEN** system applies default values for optional parameters
+- **THEN** system applies default values for optional parameters (transport = HTTP, timeout = 30000ms, poolSize = 10)
 
 #### Scenario: Invalid configuration
 - **WHEN** configuration file contains invalid JSON or missing required fields
 - **THEN** system returns validation error with details
 
 ### Requirement: Multiple server support
-The configuration SHALL support defining multiple MCP server instances with unique names.
+The configuration SHALL support defining multiple MCP server instances with unique names and optionally specifying a default server.
 
 #### Scenario: Multiple servers configured
 - **WHEN** config file defines multiple servers
 - **THEN** system loads all server configurations and allows selection by name
+
+#### Scenario: Default server configuration
+- **WHEN** config file defines a `defaultServer` name
+- **THEN** system uses that server for tool requests if no server is explicitly specified
 
 #### Scenario: Duplicate server names
 - **WHEN** configuration contains duplicate server names
