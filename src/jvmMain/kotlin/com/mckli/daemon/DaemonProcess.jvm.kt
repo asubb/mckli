@@ -47,7 +47,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             args.add("-DDAEMON_NAME=unified")
             args.add("com.mckli.daemon.DaemonMainKt")
 
-            println("[DEBUG_LOG] Spawning unified daemon: ${args.joinToString(" ")}")
+            log.debug { "Spawning unified daemon: ${args.joinToString(" ")}" }
             val processBuilder = ProcessBuilder(args)
 
             processBuilder.redirectOutput(logFile)

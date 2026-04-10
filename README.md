@@ -53,11 +53,50 @@ Build the application using the included Gradle wrapper (requires Java 21+):
 # 1. Add an MCP server
 mckli config add myserver https://mcp.example.com/api
 
-# 2. List available tools (daemons start automatically)
+# 2. Search for tools across all servers
+mckli tools search "read"
+
+# 3. List available tools for a specific server (daemons start automatically)
 mckli tools list myserver
 
-# 3. Call a tool
+# 4. Call a tool
 mckli tools call myserver read-file --json '{"path": "config.json"}'
+
+# 5. Get help for any command
+mckli --help
+mckli tools --help
+mckli tools call --help
+```
+
+### Example: Claude Subagent Skill Integration
+
+When defining a skill for a Claude subagent, provide clear explanations of how to use `mckli` commands. This helps the subagent understand how to interact with MCP servers through the wrapper.
+
+**Example `SKILL.md` snippet:**
+
+```markdown
+### MCP Tool Interaction
+
+To interact with the connected MCP servers, use the `mckli` CLI tool. It manages persistent connections via a background daemon.
+
+**Command Structure:**
+`mckli tools call <server-name> <tool-name> --json '<arguments>'`
+
+**Key Commands:**
+- `mckli tools search <query>`: **CRITICAL**: Use this first to find which server provides the tool you need. It searches across ALL configured servers.
+- `mckli tools list <server-name>`: Use this to discover all available tools and their required JSON schemas for a specific server.
+- `mckli tools call <server-name> <tool-name> --json '<json-args>'`: Use this to execute a tool. Always ensure the `--json` argument is a valid, single-quoted JSON string.
+- `mckli <command> --help`: Use this for any command to see available subcommands and flags.
+
+**Example Usage:**
+To find a tool that can read files:
+`mckli tools search "read"`
+
+To get more help on the `tools` command:
+`mckli tools --help`
+
+To read a file using the `myserver` MCP server's `read-file` tool:
+`mckli tools call myserver read-file --json '{"path": "src/main.kt"}'`
 ```
 
 ## Documentation

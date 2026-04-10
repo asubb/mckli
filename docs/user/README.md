@@ -71,9 +71,26 @@ Complete guide to using mckli for wrapping MCP servers with persistent daemon co
    mckli daemon start myserver
    ```
 
-3. **List available tools**
+3. **Search for tools**
+   ```bash
+   mckli tools search "read"
+   ```
+
+4. **List available tools**
    ```bash
    mckli tools list myserver
+   ```
+
+5. **Get more help**
+   ```bash
+   # Show global help
+   mckli --help
+
+   # Show help for a specific command group
+   mckli tools --help
+
+   # Show help for a specific command
+   mckli tools call --help
    ```
 
 ---
@@ -238,6 +255,29 @@ SSE features:
 ---
 
 ## Working with Tools
+
+### Searching for Tools
+
+**CRITICAL**: The `tools search` command is the most important tool for discovery across multiple MCP servers. It allows you to find which server provides a specific capability without needing to list each server individually.
+
+**Why use Search?**
+- **Token Efficiency**: Instead of an LLM listing all tools from all servers (which can consume thousands of tokens), it can search for a specific keyword.
+- **Discovery**: Quickly find tools when you don't remember which server they belong to.
+- **Cross-Server Search**: Results include the server name for every match.
+
+```bash
+# Search across ALL configured servers
+mckli tools search "read"
+
+# Example Output:
+# myserver:read-file Read contents of a file from the filesystem...
+# secondserver:read-db Read data from the database...
+```
+
+To get the output in JSON format for scripting:
+```bash
+mckli tools search "read" --json
+```
 
 ### Listing Tools
 

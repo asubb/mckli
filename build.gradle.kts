@@ -1,6 +1,9 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+
 plugins {
     kotlin("multiplatform") version "2.3.20"
     kotlin("plugin.serialization") version "2.3.20"
+    id("distribution")
 }
 
 group = "com.mckli"
@@ -12,6 +15,10 @@ repositories {
 
 kotlin {
     jvm {
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        mainRun {
+            mainClass.set("com.mckli.MainKt")
+        }
         testRuns.named("test") {
             executionTask.configure {
                 useJUnitPlatform()
@@ -19,10 +26,6 @@ kotlin {
                     showStandardStreams = true
                 }
             }
-        }
-        @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
-        mainRun {
-            mainClass.set("com.mckli.MainKt")
         }
         compilations.all {
             compileTaskProvider.configure {
@@ -108,22 +111,34 @@ kotlin {
     }
 }
 
-// Task to create a fat JAR with all dependencies
-tasks.register<Jar>("fatJar") {
-    group = "build"
-    description = "Creates a self-contained fat JAR with all dependencies"
-
-    archiveBaseName.set("mckli")
-    archiveClassifier.set("all")
-
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
+tasks.named<Jar>("jvmJar") {
     manifest {
         attributes["Main-Class"] = "com.mckli.MainKt"
     }
+}
 
-    val jvmMain = kotlin.targets["jvm"].compilations["main"]
-    from(jvmMain.output.classesDirs)
-    from(jvmMain.output.resourcesDir)
-    from(jvmMain.runtimeDependencyFiles?.map { if (it.isDirectory) it else zipTree(it) })
+val startScripts = tasks.register<CreateStartScripts>("startScripts") {
+    mainClass.set("com.mckli.MainKt")
+    applicationName = "mckli"
+    outputDir = layout.buildDirectory.dir("scripts").map { it.asFile }.get()
+    defaultJvmOpts = listOf("--enable-native-access=ALL-UNNAMED")
+    val jvmJar = tasks.named<Jar>("jvmJar").get()
+    val runtimeClasspath = configurations.named("jvmRuntimeClasspath").get()
+    classpath = files(jvmJar.archiveFile) + runtimeClasspath
+}
+
+configure<DistributionContainer> {
+    named("main") {
+        contents {
+            from(startScripts) {
+                into("bin")
+            }
+            from(tasks.named("jvmJar")) {
+                into("lib")
+            }
+            from(configurations.named("jvmRuntimeClasspath")) {
+                into("lib")
+            }
+        }
+    }
 }
