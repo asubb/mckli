@@ -41,24 +41,22 @@ fi
 
 echo "Latest release: ${TAG}"
 
-# Download URL for the zip distribution
-# The version in the filename matches the tag version without 'v' prefix,
-# because release.yml passes -Pversion=${TAG#v} to Gradle.
-
+# Download URL for the distribution
 VERSION=${TAG#v}
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/mckli-${VERSION}.zip"
+EXTENSION="tar"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/mckli-${VERSION}.tar"
 
 echo "Downloading from ${DOWNLOAD_URL}..."
 TEMP_DIR=$(mktemp -d)
-curl -sL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/mckli.zip"
+curl -sL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/mckli.${EXTENSION}"
 
-if [ ! -s "${TEMP_DIR}/mckli.zip" ]; then
-  echo "Error: Downloaded file is empty. Check if the release contains mckli-${VERSION}.zip"
+if [ ! -s "${TEMP_DIR}/mckli.${EXTENSION}" ]; then
+  echo "Error: Downloaded file is empty. Check if the release contains mckli-${VERSION}.${EXTENSION}"
   exit 1
 fi
 
 # Extract
-unzip -q "${TEMP_DIR}/mckli.zip" -d "${TEMP_DIR}"
+tar -xf "${TEMP_DIR}/mckli.tar" -C "${TEMP_DIR}"
 EXTRACTED_DIR="${TEMP_DIR}/mckli-${VERSION}"
 
 # Install

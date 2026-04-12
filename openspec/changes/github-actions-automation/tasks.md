@@ -10,7 +10,7 @@
 
 - [x] 2.1 Create `.github/workflows/release.yml` file.
 - [x] 2.2 Define `release` workflow to run on tag push (`v*`).
-- [x] 2.3 Add job to build JVM distribution (`./gradlew distZip`).
+- [x] 2.3 Add job to build JVM distribution (`./gradlew distZip distTar`).
 - [ ] 2.4 Add job to build Native executables (Deferred).
 - [x] 2.5 Configure GitHub Release creation and artifact upload.
 

@@ -44,8 +44,9 @@ curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/i
 Alternatively, build it from source:
 
 ```bash
-./gradlew distZip
-# Artifact: build/distributions/mckli-1.0-SNAPSHOT.zip
+./gradlew distZip # for ZIP
+./gradlew distTar # for TAR
+# Artifacts: build/distributions/
 ```
 
 ### 2. Basic Usage

@@ -23,9 +23,11 @@ jobs:
       - name: Build Distribution
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          ./gradlew distZip -Pversion=$VERSION
+          ./gradlew distZip distTar -Pversion=$VERSION
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/distributions/*.zip
+          files: |
+            build/distributions/*.zip
+            build/distributions/*.tar
           generate_release_notes: true

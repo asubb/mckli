@@ -12,7 +12,7 @@ The CD workflow SHALL generate distribution-ready artifacts for the JVM platform
 
 #### Scenario: JVM Distribution Generation
 - **WHEN** the CD workflow runs
-- **THEN** it executes `./gradlew distZip` to produce the JVM distribution ZIP file
+- **THEN** it executes `./gradlew distZip distTar` to produce the JVM distribution ZIP and TAR files
 
 ### Requirement: Automated GitHub Release Creation
 The CD workflow SHALL create a new GitHub Release corresponding to the pushed tag and upload the generated artifacts to it.

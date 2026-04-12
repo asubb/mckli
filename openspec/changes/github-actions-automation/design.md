@@ -33,9 +33,9 @@ Split into two primary workflows:
 **Decision**: A shell script hosted in the repository (e.g., `scripts/install.sh`) and triggered by a `curl | sh` one-liner.
 **Rationale**: Allows for logic to detect OS (Linux/macOS) and choose the correct binary from the latest release.
 
-### 5. Artifact Naming
-**Decision**: Use default `distribution` plugin naming: `mckli-<version>.zip`.
-**Rationale**: Standard and consistent with Gradle conventions.
+### 2. Artifact Naming
+**Decision**: Use default `distribution` plugin naming: `mckli-<version>.zip` and `mckli-<version>.tar`.
+**Rationale**: Standard and consistent with Gradle conventions. Supporting both ZIP and TAR provides better compatibility. The installation script uses the TAR format for all supported Unix-like platforms.
 
 ## Risks / Trade-offs
 
