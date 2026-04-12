@@ -38,7 +38,7 @@ A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Mode
 Install the latest release of `mckli` using the one-liner command (requires Java 21+):
 
 ```bash
-curl -sL https://raw.githubusercontent.com/mckli/openspec/main/scripts/install.sh | bash
+curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/install.sh | bash
 ```
 
 Alternatively, build it from source:

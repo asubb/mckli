@@ -4,7 +4,7 @@ set -e
 # mckli installation script
 # This script downloads the latest JVM distribution of mckli and installs it.
 
-REPO="mckli/openspec" # Adjust if the repo name is different
+REPO="asubb/mckli" # Adjust if the repo name is different
 INSTALL_DIR="/usr/local/bin"
 APP_NAME="mckli"
 

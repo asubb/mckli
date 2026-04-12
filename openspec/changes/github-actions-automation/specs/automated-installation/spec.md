@@ -19,4 +19,4 @@ The installation command SHALL dynamically resolve and download the latest publi
 
 #### Scenario: Fetching Latest Release
 - **WHEN** the `curl` command is run
-- **THEN** it uses the GitHub API or redirect URLs (e.g., `https://github.com/mckli/mckli/releases/latest/download/mckli`) to ensure the most recent version is downloaded
+- **THEN** it uses the GitHub API or redirect URLs (e.g., `https://github.com/asubb/mckli/releases/latest/download/mckli`) to ensure the most recent version is downloaded
