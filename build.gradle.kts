@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.mckli"
-version = "1.0-SNAPSHOT"
+version = if (project.hasProperty("version") && project.property("version")?.toString() != "unspecified") project.property("version").toString() else "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
