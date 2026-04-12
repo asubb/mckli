@@ -16,7 +16,7 @@ The system SHALL spawn a single global background daemon process to manage all c
 - **THEN** system returns a detailed error message and cleans up any partial state
 
 ### Requirement: PID file management
-The system SHALL maintain a single PID file in `~/.config/mckli/daemon.pid` for tracking the global daemon process.
+The system SHALL maintain a single PID file in `~/.mckli/daemon.pid` for tracking the global daemon process.
 
 #### Scenario: Create PID file on daemon start
 - **WHEN** the global daemon process is successfully spawned

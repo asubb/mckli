@@ -158,7 +158,7 @@ src/
 
 **Responsibilities:**
 
-- Store/load server configurations from `~/.config/mckli/servers.json`
+- Store/load server configurations from `~/.mckli/servers.json`
 - Validate URLs, timeouts, pool sizes
 - Handle authentication (Basic, Bearer)
 
@@ -224,7 +224,7 @@ class ConnectionPool(config: ServerConfig) {
 **Responsibilities:**
 
 - Spawn daemon as separate process
-- Manage PID files in `~/.config/mckli/daemons/`
+- Manage PID files in `~/.mckli/daemons/`
 - Handle SIGTERM for graceful shutdown
 - Initialize HTTP client and tool cache on startup
 

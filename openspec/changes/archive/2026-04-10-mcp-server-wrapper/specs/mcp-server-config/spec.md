@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Configuration file location
-The system SHALL store MCP server configuration in `~/.config/mckli/servers.json` with JSON format.
+The system SHALL store MCP server configuration in `~/.mckli/servers.json` with JSON format.
 
 #### Scenario: Default config location
 - **WHEN** CLI reads configuration without custom path
-- **THEN** system loads from `~/.config/mckli/servers.json`
+- **THEN** system loads from `~/.mckli/servers.json`
 
 #### Scenario: Custom config path
 - **WHEN** user specifies custom config path via environment variable or flag

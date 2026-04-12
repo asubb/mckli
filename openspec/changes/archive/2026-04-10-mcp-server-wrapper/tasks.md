@@ -9,7 +9,7 @@
 ## 2. Configuration System
 
 - [x] 2.1 Define ServerConfig data class with name, endpoint, auth, timeout, pool size
-- [x] 2.2 Implement configuration file reader for ~/.config/mckli/servers.json
+- [x] 2.2 Implement configuration file reader for ~/.mckli/servers.json
 - [x] 2.3 Add configuration validation logic for URL format, timeout values
 - [x] 2.4 Create configuration file writer with pretty-printed JSON
 - [x] 2.5 Implement `config add` command for adding new servers
@@ -49,7 +49,7 @@
 
 - [x] 5.1 Create DaemonProcess class for daemon lifecycle management
 - [x] 5.2 Implement daemon process spawning with server configuration
-- [x] 5.3 Add PID file creation in ~/.config/mckli/daemons/ directory
+- [x] 5.3 Add PID file creation in ~/.mckli/daemons/ directory
 - [x] 5.4 Implement PID file reading and process validation
 - [x] 5.5 Add stale PID file cleanup on CLI startup
 - [x] 5.6 Implement `daemon start` command with server name parameter

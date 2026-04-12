@@ -106,7 +106,7 @@ Unix sockets or named pipes).
 
 ### 5. Daemon Lifecycle: PID Files vs System Service
 
-**Decision:** Use PID files stored in user config directory (`~/.config/mckli/daemons/`) for daemon tracking.
+**Decision:** Use PID files stored in user config directory (`~/.mckli/daemons/`) for daemon tracking.
 
 **Rationale:**
 

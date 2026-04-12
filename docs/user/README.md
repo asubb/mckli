@@ -152,7 +152,7 @@ mckli config remove myserver
 mckli config edit
 ```
 
-This displays the config file path: `~/.config/mckli/servers.json`
+This displays the config file path: `~/.mckli/servers.json`
 
 You can then edit it manually:
 ```json
@@ -197,7 +197,7 @@ Output:
 ```
 Daemon status:
   myserver: RUNNING (PID: 12345)
-    Socket: /home/user/.config/mckli/daemons/myserver.sock
+    Socket: /home/user/.mckli/daemons/myserver.sock
   otherserver: STOPPED
 ```
 
@@ -219,7 +219,7 @@ mckli daemon restart myserver
 
 ### Understanding Daemon Logs
 
-Logs are stored in `~/.config/mckli/daemons/`:
+Logs are stored in `~/.mckli/daemons/`:
 - `<server>.log` - Standard output
 - `<server>.err` - Error output
 - `<server>.pid` - Process ID file
@@ -228,13 +228,13 @@ Logs are stored in `~/.config/mckli/daemons/`:
 **View logs:**
 ```bash
 # Standard output
-cat ~/.config/mckli/daemons/myserver.log
+cat ~/.mckli/daemons/myserver.log
 
 # Errors
-cat ~/.config/mckli/daemons/myserver.err
+cat ~/.mckli/daemons/myserver.err
 
 # Tail live logs
-tail -f ~/.config/mckli/daemons/myserver.log
+tail -f ~/.mckli/daemons/myserver.log
 ```
 
 ### SSE Transport (JVM only)
@@ -384,7 +384,7 @@ If you have a default server configured, you can omit the server name:
 
 ```bash
 # Set default in config
-# Edit ~/.config/mckli/servers.json and set "defaultServer": "myserver"
+# Edit ~/.mckli/servers.json and set "defaultServer": "myserver"
 
 # Then use commands without server name
 mckli tools list
@@ -446,17 +446,17 @@ Daemons automatically manage connections:
 
 **Check if port/socket is in use:**
 ```bash
-ls -la ~/.config/mckli/daemons/
+ls -la ~/.mckli/daemons/
 # Look for .sock files
 
 # Clean up stale sockets
-rm ~/.config/mckli/daemons/myserver.sock
+rm ~/.mckli/daemons/myserver.sock
 mckli daemon start myserver
 ```
 
 **Check logs:**
 ```bash
-cat ~/.config/mckli/daemons/myserver.err
+cat ~/.mckli/daemons/myserver.err
 ```
 
 **Force cleanup:**
@@ -502,7 +502,7 @@ mckli daemon status
 
 **Check logs for errors:**
 ```bash
-tail -f ~/.config/mckli/daemons/myserver.log
+tail -f ~/.mckli/daemons/myserver.log
 ```
 
 **Restart daemon to clear connection pool:**
@@ -620,7 +620,7 @@ done
 
 ## Configuration Details
 
-Configuration is stored in `~/.config/mckli/servers.json`.
+Configuration is stored in `~/.mckli/servers.json`.
 
 ### Config File Format
 
@@ -664,7 +664,7 @@ Streaming communication for real-time updates.
 
 ### Daemon State
 
-Daemon-related files are stored in `~/.config/mckli/daemons/`:
+Daemon-related files are stored in `~/.mckli/daemons/`:
 - `<server-name>.pid`: Process ID files.
 - `<server-name>.sock`: Unix domain sockets (or named pipes on Windows).
 - `<server-name>.log`: Daemon standard output logs.
@@ -678,8 +678,8 @@ Daemon-related files are stored in `~/.config/mckli/daemons/`:
 
 1. **Check logs**:
    ```bash
-   cat ~/.config/mckli/daemons/<server>.log
-   cat ~/.config/mckli/daemons/<server>.err
+   cat ~/.mckli/daemons/<server>.log
+   cat ~/.mckli/daemons/<server>.err
    ```
 2. **Clean up stale processes**:
    ```bash
