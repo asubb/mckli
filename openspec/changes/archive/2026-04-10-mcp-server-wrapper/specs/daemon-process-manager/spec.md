@@ -16,7 +16,7 @@ The system SHALL spawn a separate daemon process for each configured MCP server 
 - **THEN** system returns detailed error message and cleans up partial state
 
 ### Requirement: PID file management
-The system SHALL maintain PID files in `~/.config/mckli/daemons/` for tracking running daemon processes.
+The system SHALL maintain PID files in `~/.mckli/daemons/` for tracking running daemon processes.
 
 #### Scenario: Create PID file on daemon start
 - **WHEN** daemon process is successfully spawned

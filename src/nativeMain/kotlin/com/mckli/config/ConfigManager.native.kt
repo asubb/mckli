@@ -7,14 +7,14 @@ import platform.posix.*
 actual class ConfigManager {
     actual fun getConfigPath(): String {
         val home = getenv("HOME")?.toKString() ?: throw ConfigException("HOME environment variable not set")
-        val configDir = "$home/.config/mckli"
+        val configDir = "$home/.mckli"
         mkdir(configDir, 0x1FFu) // 0777
         return "$configDir/servers.json"
     }
 
     actual fun getDaemonsPath(): String {
         val home = getenv("HOME")?.toKString() ?: throw ConfigException("HOME environment variable not set")
-        val daemonsDir = "$home/.config/mckli/daemons"
+        val daemonsDir = "$home/.mckli/daemons"
         mkdir(daemonsDir, 0x1FFu) // 0777
         return daemonsDir
     }

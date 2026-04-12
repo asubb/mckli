@@ -14,7 +14,7 @@ actual class ConfigManager {
             File(configDirStr)
         } else {
             val home = System.getProperty("user.home")
-            File(home, ".config/mckli")
+            File(home, ".mckli")
         }
 
         if (!configDir.exists()) {
@@ -30,7 +30,7 @@ actual class ConfigManager {
             File(daemonsDirStr)
         } else {
             val home = System.getProperty("user.home")
-            File(home, ".config/mckli/daemons")
+            File(home, ".mckli/daemons")
         }
 
         if (!daemonsDir.exists()) {
