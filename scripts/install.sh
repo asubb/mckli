@@ -63,12 +63,13 @@ EXTRACTED_DIR="${TEMP_DIR}/mckli-${VERSION}"
 
 # Install
 # The distribution has bin/mckli and lib/*.jar
-# We will move it to a persistent location, e.g., /opt/mckli or similar, 
-# and symlink the binary. For simplicity in this script, we'll try to put it in /usr/local/lib/mckli
 LIB_DEST="/usr/local/lib/${APP_NAME}"
 sudo mkdir -p "${LIB_DEST}"
 sudo cp -r "${EXTRACTED_DIR}/lib" "${LIB_DEST}/"
 sudo cp -r "${EXTRACTED_DIR}/bin" "${LIB_DEST}/"
+
+# Ensure the binary is executable
+sudo chmod +x "${LIB_DEST}/bin/${APP_NAME}"
 
 # Symlink
 sudo ln -sf "${LIB_DEST}/bin/${APP_NAME}" "${INSTALL_DIR}/${APP_NAME}"
