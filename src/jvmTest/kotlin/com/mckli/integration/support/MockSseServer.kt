@@ -26,7 +26,7 @@ class MockSseServer(private val port: Int = 8081) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val pendingRequests = ConcurrentHashMap<String, JsonObject>()
     private val initializedSessions = mutableSetOf<String>()
-    private var sessionEndpoint: String? = null
+    private var sessionEndpoint: String? = "/messages/"
     private val requestCount = ConcurrentHashMap<String, Int>()
     private val tools = mutableListOf<MockTool>()
 
@@ -109,7 +109,7 @@ class MockSseServer(private val port: Int = 8081) {
                 // POST endpoint for receiving client requests
                 post("/sse") {
                     requestCount["/sse"] = requestCount.getOrDefault("/sse", 0) + 1
-                    handlePostRequest(call)
+                    call.respond(HttpStatusCode.MethodNotAllowed, "Use session endpoint for POST requests")
                 }
 
                 post("/messages/") {

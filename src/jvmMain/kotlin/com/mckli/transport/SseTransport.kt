@@ -45,6 +45,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
     // Dynamic POST endpoint received from SSE
     private var postEndpoint = config.endpoint
+    private val endpointDeferred = CompletableDeferred<String>()
 
     // Reconnection strategy
     private val reconnectionStrategy = ReconnectionStrategy()
@@ -251,6 +252,7 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
                 }
                 logger.info { "Updated POST endpoint from SSE: $newEndpoint" }
                 postEndpoint = newEndpoint
+                endpointDeferred.complete(newEndpoint)
                 return
             } catch (e: Exception) {
                 logger.error(e) { "Failed to parse endpoint from SSE event: $data" }
@@ -388,8 +390,13 @@ class SseTransport(private val config: ServerConfig) : McpTransport {
 
     private suspend fun sendPostRequest(message: McpMessage): Result<Unit> {
         return try {
-            val response = client.post(postEndpoint) {
-                logger.debug { "Sending POST request to: $postEndpoint" }
+            // Wait for endpoint if it hasn't been received yet
+            val targetEndpoint = withTimeoutOrNull(5000) {
+                endpointDeferred.await()
+            } ?: postEndpoint // Fallback to current (initially config.endpoint) if timeout
+
+            val response = client.post(targetEndpoint) {
+                logger.debug { "Sending POST request to: $targetEndpoint" }
                 contentType(ContentType.Application.Json)
                 setBody(message)
 
