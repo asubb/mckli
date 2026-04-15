@@ -141,7 +141,8 @@ class ToolsSearchCommand : CliktCommand(name = "search") {
         prettyPrint = true
     }
 
-    private val searchService = ToolSearchService(json)
+    private val similarityService = DefaultSimilarityService()
+    private val searchService = ToolSearchService(similarityService, json)
 
     override fun run() {
         val configManager = ConfigManager()
@@ -162,7 +163,8 @@ class ToolsSearchCommand : CliktCommand(name = "search") {
                     } else {
                         previewSnippet
                     }
-                    echo("${res.server}:${res.name} $truncatedPreview")
+                    val scoreDisplay = if (res.score > 0.0) " [score: ${"%.2f".format(res.score)}]" else ""
+                    echo("${res.server}:${res.name} $truncatedPreview$scoreDisplay")
                 }
             }
         }

@@ -16,10 +16,12 @@ internal data class SearchResult(
     val server: String,
     val name: String,
     val description: String?,
-    val preview: String
+    val preview: String,
+    val score: Double = 0.0
 )
 
 internal class ToolSearchService(
+    private val similarityService: SimilarityService = DefaultSimilarityService(),
     private val json: Json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
@@ -38,24 +40,33 @@ internal class ToolSearchService(
                 }
             }
         }
-        return results
+        return results.sortedByDescending { it.score }
     }
 
     fun filterTools(serverName: String, tools: List<ToolMetadata>, query: String): List<SearchResult> {
-        return tools.filter { tool ->
-            tool.name.contains(query, ignoreCase = true) ||
-                    tool.description?.contains(query, ignoreCase = true) == true
-        }.map { tool ->
-            val descMatch = tool.description?.indexOf(query, ignoreCase = true) ?: -1
-            val preview = if (descMatch >= 0) {
-                tool.description?.substring(
-                    max(0, descMatch - 30),
-                    min(tool.description.length, descMatch + query.length + 30)
-                ) ?: ""
+        return tools.mapNotNull { tool ->
+            val nameScore = similarityService.calculateSimilarityScore(query, tool.name)
+            val descriptionScore = tool.description?.let { similarityService.calculateMaxChunkSimilarity(query, it) } ?: 0.0
+            
+            // Weight name matches higher than description matches
+            val finalScore = maxOf(nameScore * 1.2, descriptionScore)
+
+            if (finalScore > 0.3 || tool.name.contains(query, ignoreCase = true) || tool.description?.contains(query, ignoreCase = true) == true) {
+                val descMatch = tool.description?.indexOf(query, ignoreCase = true) ?: -1
+                val preview = if (descMatch >= 0) {
+                    tool.description?.substring(
+                        max(0, descMatch - 30),
+                        min(tool.description.length, descMatch + query.length + 30)
+                    ) ?: ""
+                } else if (tool.description != null && tool.description.length > 60) {
+                    tool.description.substring(0, 60) + "..."
+                } else {
+                    tool.description ?: ""
+                }
+                SearchResult(serverName, tool.name, tool.description, preview, minOf(1.0, finalScore))
             } else {
-                ""
+                null
             }
-            SearchResult(serverName, tool.name, tool.description, preview)
         }
     }
 }
