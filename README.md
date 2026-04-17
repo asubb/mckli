@@ -35,7 +35,7 @@ A Kotlin-based CLI tool that acts as a bridge between LLMs and MCP (Model Contex
 
 ### 1. Installation
 
-Install the latest release of `mckli` using the one-liner command (requires Java 17+):
+Install the latest release of `mckli` using the one-liner command (requires Java 21+):
 
 ```bash
 curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/install.sh | bash
@@ -108,7 +108,7 @@ To read a file using the `myserver` MCP server's `read-file` tool:
 
 ## Requirements
 
-- **Java 17 or higher** (for building and JVM execution)
+- **Java 21 or higher** (for building and JVM execution)
 - **Unix-like OS** (Linux, macOS) recommended; Windows supported via WSL or limited native testing.
 
 ## License

@@ -8,15 +8,15 @@ REPO="asubb/mckli" # Adjust if the repo name is different
 INSTALL_DIR="/usr/local/bin"
 APP_NAME="mckli"
 
-# Check for Java 17+
+# Check for Java 21+
 if ! command -v java >/dev/null 2>&1; then
-  echo "Error: Java is not installed. Please install Java 17 or higher."
+  echo "Error: Java is not installed. Please install Java 21 or higher."
   exit 1
 fi
 
 JAVA_VERSION=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | cut -d'.' -f1)
-if [ "$JAVA_VERSION" -lt 17 ]; then
-  echo "Error: Java version 17 or higher is required. Current version: $JAVA_VERSION"
+if [ "$JAVA_VERSION" -lt 21 ]; then
+  echo "Error: Java version 21 or higher is required. Current version: $JAVA_VERSION"
   exit 1
 fi
 
