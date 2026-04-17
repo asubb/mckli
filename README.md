@@ -1,6 +1,6 @@
 # mckli - MCP CLI Wrapper
 
-A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Model Context Protocol) servers. It optimizes performance and reduces token usage by maintaining persistent connections through background daemon processes and intelligent metadata caching.
+A Kotlin-based CLI tool that acts as a bridge between LLMs and MCP (Model Context Protocol) servers. It optimizes performance and reduces token usage by maintaining persistent connections through background daemon processes and intelligent metadata caching.
 
 ## Core Intentions
 
@@ -19,7 +19,7 @@ A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Mode
     ┌────▼─────┐
     │   mckli  │ (Stateless CLI)
     └────┬─────┘
-         │ IPC (Unix Sockets / Named Pipes)
+         │ HTTP API
     ┌────▼───────────────┐
     │    Daemon          │
     │  - Connection Pool │
@@ -44,9 +44,8 @@ curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/i
 Alternatively, build it from source:
 
 ```bash
-./gradlew distZip # for ZIP
-./gradlew distTar # for TAR
-# Artifacts: build/distributions/
+./gradlew installDist # installs to build/install/mckli
+# Artifacts: build/install/mckli/bin/mckli
 ```
 
 ### 2. Basic Usage

@@ -1,14 +1,20 @@
 package com.mckli.config
- 
+
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Paths
- 
+
 private val logger = KotlinLogging.logger {}
- 
-actual class ConfigManager {
-    actual fun getConfigPath(): String {
+
+val json = Json {
+    prettyPrint = true
+    ignoreUnknownKeys = true
+}
+
+class ConfigManager() {
+    fun getConfigPath(): String {
         val configDirStr = System.getProperty("mckli.config.dir")
         val configDir = if (configDirStr != null) {
             File(configDirStr)
@@ -24,7 +30,7 @@ actual class ConfigManager {
         return File(configDir, "servers.json").absolutePath
     }
 
-    actual fun getDaemonsPath(): String {
+    fun getDaemonsPath(): String {
         val daemonsDirStr = System.getProperty("mckli.daemons.dir")
         val daemonsDir = if (daemonsDirStr != null) {
             File(daemonsDirStr)
@@ -39,8 +45,8 @@ actual class ConfigManager {
         }
         return daemonsDir.absolutePath
     }
- 
-    actual fun readConfig(): Configuration? {
+
+    fun readConfig(): Configuration? {
         val configPath = getConfigPath()
         val configFile = File(configPath)
         if (!configFile.exists()) {
@@ -56,8 +62,8 @@ actual class ConfigManager {
             throw ConfigException("Failed to read configuration: ${e.message}")
         }
     }
- 
-    actual fun writeConfig(config: Configuration) {
+
+    fun writeConfig(config: Configuration) {
         val configPath = getConfigPath()
         val configFile = File(configPath)
         try {
@@ -72,3 +78,43 @@ actual class ConfigManager {
 }
 
 class ConfigException(message: String) : Exception(message)
+
+class ConfigValidator {
+    fun validate(config: Configuration): List<String> {
+        val errors = mutableListOf<String>()
+
+        config.servers.forEach { server ->
+            // Validate URL format
+            if (!server.endpoint.startsWith("http://") && !server.endpoint.startsWith("https://")) {
+                errors.add("Server '${server.name}': Endpoint must start with http:// or https://")
+            }
+
+            // Validate timeout
+            if (server.timeout <= 0) {
+                errors.add("Server '${server.name}': timeout must be positive")
+            }
+
+            // Validate pool size
+            if (server.poolSize <= 0) {
+                errors.add("Server '${server.name}': pool size must be positive")
+            }
+        }
+
+        // Check for duplicate server names
+        val nameGroups = config.servers.groupBy { it.name }
+        nameGroups.forEach { (name, servers) ->
+            if (servers.size > 1) {
+                errors.add("Duplicate server name: $name")
+            }
+        }
+
+        // Check default server exists
+        config.defaultServer?.let { defaultName ->
+            if (!config.servers.any { it.name == defaultName }) {
+                errors.add("Default server '$defaultName' not found in configuration")
+            }
+        }
+
+        return errors
+    }
+}

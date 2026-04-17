@@ -24,10 +24,10 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
       - name: Build and Test
-        run: ./gradlew jvmTest
+        run: ./gradlew test
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
           files: |
-            build/test-results/jvmTest/**/*.xml
+            build/test-results/test/**/*.xml

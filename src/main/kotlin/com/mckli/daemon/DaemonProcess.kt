@@ -3,11 +3,12 @@ package com.mckli.daemon
 import com.mckli.config.ConfigManager
 import com.mckli.config.ServerConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.serialization.Serializable
 import java.io.File
 
 private val log = KotlinLogging.logger {  }
 
-actual class DaemonProcess actual constructor(private val config: ServerConfig) {
+class DaemonProcess(private val config: ServerConfig) {
     private val configManager = ConfigManager()
     private val daemonsDir = File(configManager.getDaemonsPath())
     private val pidFile = File(daemonsDir, "daemon.pid")
@@ -21,7 +22,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         log.info { "Initialized unified daemon process, daemon directory: ${daemonsDir.absolutePath}" }
     }
 
-    actual fun start(): Result<Unit> {
+    fun start(): Result<Unit> {
         return try {
             // Check if already running
             if (isRunning()) {
@@ -42,6 +43,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
             // Pass configuration and daemon directory properties if they are set
             System.getProperty("mckli.config.dir")?.let { args.add("-Dmckli.config.dir=$it") }
             System.getProperty("mckli.daemons.dir")?.let { args.add("-Dmckli.daemons.dir=$it") }
+            System.getProperty("java.class.path")?.let { args.add("-Djava.class.path=$it") }
             
             args.add("-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}")
             args.add("-DDAEMON_NAME=unified")
@@ -107,7 +109,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         }
     }
 
-    actual fun stop(force: Boolean): Result<Unit> {
+    fun stop(force: Boolean = false): Result<Unit> {
         return try {
             val pid = getPid() ?: return Result.failure(DaemonException("Daemon not running"))
 
@@ -148,7 +150,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         }
     }
 
-    actual fun isRunning(): Boolean {
+    fun isRunning(): Boolean {
         val pid = getPid() ?: return false
 
         return try {
@@ -161,7 +163,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         }
     }
 
-    actual fun getPid(): Int? {
+    fun getPid(): Int? {
         if (!pidFile.exists()) return null
 
         return try {
@@ -171,7 +173,7 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         }
     }
 
-    actual fun getSocketPath(): String {
+    fun getSocketPath(): String {
         return pidFile.parentFile.absolutePath + "/daemon.sock" // Not used for connection anymore, but kept for tests/compatibility
     }
 
@@ -179,3 +181,23 @@ actual class DaemonProcess actual constructor(private val config: ServerConfig) 
         pidFile.delete()
     }
 }
+
+@Serializable
+data class DaemonStatus(
+    val isRunning: Boolean,
+    val pid: Int?,
+    val managedServers: List<String> = emptyList(),
+    val connectionStates: Map<String, ConnectionState> = emptyMap(),
+    val lastErrors: Map<String, String?> = emptyMap()
+)
+
+enum class ConnectionState {
+    Unknown,
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Failed
+}
+
+class DaemonException(message: String, cause: Throwable? = null) : Exception(message, cause)
