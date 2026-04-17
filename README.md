@@ -1,6 +1,6 @@
 # mckli - MCP CLI Wrapper
 
-A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Model Context Protocol) servers. It optimizes performance and reduces token usage by maintaining persistent connections through background daemon processes and intelligent metadata caching.
+A Kotlin-based CLI tool that acts as a bridge between LLMs and MCP (Model Context Protocol) servers. It optimizes performance and reduces token usage by maintaining persistent connections through background daemon processes and intelligent metadata caching.
 
 ## Core Intentions
 
@@ -19,7 +19,7 @@ A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Mode
     ┌────▼─────┐
     │   mckli  │ (Stateless CLI)
     └────┬─────┘
-         │ IPC (Unix Sockets / Named Pipes)
+         │ HTTP API
     ┌────▼───────────────┐
     │    Daemon          │
     │  - Connection Pool │
@@ -35,7 +35,7 @@ A Kotlin Multiplatform CLI tool that acts as a bridge between LLMs and MCP (Mode
 
 ### 1. Installation
 
-Install the latest release of `mckli` using the one-liner command (requires Java 21+):
+Install the latest release of `mckli` using the one-liner command (requires Java 17+):
 
 ```bash
 curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/install.sh | bash
@@ -44,9 +44,8 @@ curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/i
 Alternatively, build it from source:
 
 ```bash
-./gradlew distZip # for ZIP
-./gradlew distTar # for TAR
-# Artifacts: build/distributions/
+./gradlew installDist # installs to build/install/mckli
+# Artifacts: build/install/mckli/bin/mckli
 ```
 
 ### 2. Basic Usage
@@ -109,7 +108,7 @@ To read a file using the `myserver` MCP server's `read-file` tool:
 
 ## Requirements
 
-- **Java 21 or higher** (for building and JVM execution)
+- **Java 17 or higher** (for building and JVM execution)
 - **Unix-like OS** (Linux, macOS) recommended; Windows supported via WSL or limited native testing.
 
 ## License
