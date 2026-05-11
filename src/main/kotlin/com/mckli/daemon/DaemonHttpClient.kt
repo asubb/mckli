@@ -27,8 +27,8 @@ class DaemonHttpClient(private val baseUrl: String = "http://localhost:5030") {
             })
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 60000
-            connectTimeoutMillis = 5000
+            requestTimeoutMillis = 60000L
+            connectTimeoutMillis = 5000L
         }
     }
 

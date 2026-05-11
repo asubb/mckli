@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -e
+
+./gradlew installDist
+
+export MCKLI_CONFIG_DIR=$(pwd)/.test-home/
+export MCKLI_LOG_DIR=$(pwd)/.test-home/logs/
+export MCKLI_DAEMONS_DIR=$(pwd)/.test-home/daemon/
+export MCKLI_STDOUT_LOG_LEVEL=WARN
+
+mkdir -p "$MCKLI_CONFIG_DIR"
+mkdir -p "$MCKLI_LOG_DIR"
+mkdir -p "$MCKLI_DAEMONS_DIR"
+
+build/install/mckli/bin/mckli "$@"

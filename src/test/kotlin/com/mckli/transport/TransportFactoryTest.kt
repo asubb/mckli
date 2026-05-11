@@ -2,13 +2,15 @@ package com.mckli.transport
 
 import com.mckli.config.ServerConfig
 import com.mckli.config.TransportType
+import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
+import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class TransportFactoryTest {
 
     @Test
-    fun `create returns HttpTransport for HTTP transport type`() {
+    fun `create returns StreamableHttpClientTransport for HTTP transport type`() {
         val config = ServerConfig(
             name = "test",
             endpoint = "https://example.com/api",
@@ -17,11 +19,11 @@ class TransportFactoryTest {
 
         val transport = TransportFactory.create(config)
 
-        assertTrue(transport is HttpTransport)
+        assertTrue(transport is StreamableHttpClientTransport)
     }
 
     @Test
-    fun `create returns HttpTransport when transport not specified`() {
+    fun `create returns StreamableHttpClientTransport when transport not specified`() {
         val config = ServerConfig(
             name = "test",
             endpoint = "https://example.com/api"
@@ -29,11 +31,11 @@ class TransportFactoryTest {
 
         val transport = TransportFactory.create(config)
 
-        assertTrue(transport is HttpTransport)
+        assertTrue(transport is StreamableHttpClientTransport)
     }
 
     @Test
-    fun `create returns SseTransport for SSE transport type`() {
+    fun `create returns SseClientTransport for SSE transport type`() {
         val config = ServerConfig(
             name = "test",
             endpoint = "https://example.com/sse",
@@ -42,6 +44,6 @@ class TransportFactoryTest {
 
         val transport = TransportFactory.create(config)
 
-        assertTrue(transport is SseTransport)
+        assertTrue(transport is SseClientTransport)
     }
 }

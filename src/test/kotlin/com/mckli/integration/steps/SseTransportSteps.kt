@@ -9,7 +9,6 @@ import com.mckli.daemon.DaemonHttpClient
 import com.mckli.daemon.DaemonProcess
 import com.mckli.integration.support.MockSseServer
 import com.mckli.integration.support.TestConfiguration
-import com.mckli.transport.SseTransport
 import io.cucumber.datatable.DataTable
 import io.cucumber.java8.En
 import io.ktor.client.*
@@ -31,7 +30,6 @@ import kotlin.time.Duration.Companion.milliseconds
 class SseTransportSteps : En {
     private val mockServer = MockSseServer(port = 8081)
     private val serverConfigs = mutableMapOf<String, ServerConfig>()
-    private val transports = mutableMapOf<String, SseTransport>()
     private val daemons = mutableMapOf<String, DaemonProcess>()
     private var lastServerConfig: ServerConfig? = null
     private var connectionEstablished = false
@@ -47,8 +45,6 @@ class SseTransportSteps : En {
             testConfigDir = TestConfiguration.tempDir
             configManager = ConfigManager()
             serverConfigs.clear()
-            transports.values.forEach { it.close() }
-            transports.clear()
             daemons.clear()
             lastServerConfig = null
             connectionEstablished = false
@@ -74,15 +70,6 @@ class SseTransportSteps : En {
                 }
             }
 
-            // Clean up transports
-            transports.values.forEach { transport ->
-                try {
-                    transport.close()
-                } catch (e: Exception) {
-                    // Ignore cleanup errors
-                }
-            }
-
             mockServer.stop()
         }
 
@@ -90,7 +77,7 @@ class SseTransportSteps : En {
         Given("a server {string} with SSE transport") { serverName: String ->
             val config = ServerConfig(
                 name = serverName,
-                endpoint = "http://localhost:8081/sse",
+                endpoint = "http://localhost:8081",
                 transport = SSE,
                 timeout = 10000,
                 poolSize = 10
@@ -146,10 +133,8 @@ class SseTransportSteps : En {
 
         Given("the SSE server provides a dynamic POST endpoint {string}") { endpoint: String ->
             mockServer.sendEvent(
-                MockSseServer.SseEvent(
-                    event = "endpoint",
-                    data = endpoint
-                )
+                data = endpoint,
+                event = "endpoint"
             )
             // Give some time for the client to receive the event
             Thread.sleep(200)

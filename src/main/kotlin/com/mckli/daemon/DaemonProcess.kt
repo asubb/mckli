@@ -46,7 +46,6 @@ class DaemonProcess(private val config: ServerConfig) {
             System.getProperty("java.class.path")?.let { args.add("-Djava.class.path=$it") }
             
             args.add("-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}")
-            args.add("-DDAEMON_NAME=unified")
             args.add("com.mckli.daemon.DaemonMainKt")
 
             log.debug { "Spawning unified daemon: ${args.joinToString(" ")}" }

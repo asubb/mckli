@@ -1,8 +1,8 @@
 package com.mckli.http
 
 import com.mckli.config.ServerConfig
-import com.mckli.transport.McpTransport
 import com.mckli.transport.TransportFactory
+import io.modelcontextprotocol.kotlin.sdk.shared.Transport
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,18 +15,18 @@ import kotlin.time.Duration.Companion.milliseconds
 private val logger = KotlinLogging.logger {}
 
 /**
- * Connection pool wrapper that manages McpTransport lifecycle and metrics.
+ * Connection pool wrapper that manages Transport lifecycle and metrics.
  * For HTTP transport, the actual HTTP connection pooling is handled by Ktor's CIO engine.
  * For SSE transport, a single persistent connection is used.
  */
 class ConnectionPool(
     private val config: ServerConfig,
-    private val providedTransport: McpTransport? = null,
+    private val providedTransport: Transport? = null,
     private val idleTimeout: Duration = 5.minutes,
     private val maxLifetime: Duration = 30.minutes
 ) {
     private val mutex = Mutex()
-    private var transport: McpTransport? = providedTransport
+    private var transport: Transport? = providedTransport
     private var transportCreatedAt: Instant? = Clock.System.now()
     private var lastUsedAt: Instant? = Clock.System.now()
     private var totalCreated = if (providedTransport != null) 1 else 0
@@ -34,7 +34,7 @@ class ConnectionPool(
 
     private val metrics = PoolMetrics()
 
-    suspend fun <T> executeRequest(block: suspend (McpTransport) -> T): T {
+    suspend fun <T> executeRequest(block: suspend (Transport) -> T): T {
         val currentTransport = mutex.withLock {
             activeRequests++
             val now = Clock.System.now()
@@ -53,7 +53,7 @@ class ConnectionPool(
 
             if (needsRecreation) {
                 logger.debug { "Recreating transport for ${config.name} (reason: ${if (transport == null) "first use" else "expired/idle"})" }
-                transport?.close()
+                // transport?.close()
                 transport = TransportFactory.create(config)
                 transportCreatedAt = now
                 totalCreated++
@@ -97,7 +97,7 @@ class ConnectionPool(
         mutex.withLock {
             // Only close it if it was NOT provided from outside
             if (providedTransport == null) {
-                transport?.close()
+                // transport?.close()
             }
             transport = null
             transportCreatedAt = null
@@ -109,7 +109,7 @@ class ConnectionPool(
     suspend fun forceShutdown() {
         mutex.withLock {
             if (providedTransport == null) {
-                transport?.close()
+                // transport?.close()
             }
             transport = null
             transportCreatedAt = null

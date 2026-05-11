@@ -1,8 +1,6 @@
-<configuration>
-    <timestamp key="bySecond" datePattern="yyyy-MM-dd_HH-mm-ss"/>
-    
+<configuration debug="false">
     <appender name="DAEMON_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>${MCKLI_LOG_DIR:-${user.home}/.mckli/daemons}/mckli-daemon-${DAEMON_NAME:-unknown}.log</file>
+        <file>${MCKLI_LOG_DIR:-${user.home}/.mckli/daemons}/mckli-daemon.log</file>
         <append>true</append>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
@@ -22,7 +20,7 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>WARN</level>
+            <level>${MCKLI_STDOUT_LOG_LEVEL:-WARN}</level>
         </filter>
     </appender>
 

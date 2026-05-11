@@ -12,7 +12,7 @@ enum class TransportType {
 data class ServerConfig(
     val name: String,
     val endpoint: String,
-    val transport: TransportType = TransportType.HTTP,
+    val transport: TransportType = TransportType.SSE,
     val auth: AuthConfig? = null,
     val timeout: Long = 30000, // milliseconds
     val poolSize: Int = 10

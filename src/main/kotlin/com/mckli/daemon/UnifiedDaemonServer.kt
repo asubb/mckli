@@ -1,6 +1,8 @@
 package com.mckli.daemon
 
 import com.mckli.tools.ToolList
+import kotlinx.serialization.json.Json
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -10,8 +12,6 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.serialization.json.Json
 
 private val logger = KotlinLogging.logger {}
 
@@ -19,7 +19,7 @@ class UnifiedDaemonServer(
     private val daemonManager: DaemonManager,
     private val port: Int = 5030
 ) {
-    private var server: NettyApplicationEngine? = null
+    private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
 
     fun start() {
         server = embeddedServer(Netty, port = port, host = "127.0.0.1") {
@@ -92,7 +92,8 @@ class UnifiedDaemonServer(
                         val context = daemonManager.getServerContext(name) ?: return@post call.respond(HttpStatusCode.NotFound, "Server $name not found")
                         
                         val request = call.receive<ToolCallRequest>()
-                        val result = context.toolCache.callTool(request.toolName, request.arguments, context.connectionPool)
+                        val arguments = request.arguments as? kotlinx.serialization.json.JsonObject
+                        val result = context.toolCache.callTool(request.toolName, arguments)
                         
                         result.fold(
                             onSuccess = { call.respond(it) },
@@ -114,15 +115,18 @@ class UnifiedDaemonServer(
                         val context = daemonManager.getServerContext(name) ?: return@post call.respond(HttpStatusCode.NotFound, "Server $name not found")
                         
                         try {
+                            logger.debug { "Refreshing tool cache for $name" }
                             context.toolCache.refresh()
                             call.respond(HttpStatusCode.OK, "Tools refreshed")
                         } catch (e: Exception) {
+                            logger.error(e) { "Failed to refresh tools for $name" }
                             call.respond(HttpStatusCode.InternalServerError, e.message ?: "Refresh failed")
                         }
                     }
                 }
             }
-        }.start(wait = false)
+        }
+        server?.start(wait = false)
     }
 
     fun stop() {

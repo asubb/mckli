@@ -9,6 +9,10 @@ import com.mckli.transport.McpTransport
 import com.mckli.transport.SseConnectionState
 import com.mckli.transport.TransportFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.modelcontextprotocol.kotlin.sdk.client.Client
+import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.Transport
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -25,7 +29,8 @@ class DaemonManager {
         val config: ServerConfig,
         val connectionPool: ConnectionPool,
         val toolCache: ToolCache,
-        val transport: McpTransport,
+        val transport: Transport,
+        val client: Client,
         val connectionState: MutableStateFlow<ConnectionState>,
         val lastError: MutableStateFlow<String?>
     )
@@ -59,50 +64,65 @@ class DaemonManager {
 
     private suspend fun createContext(config: ServerConfig): ServerContext {
         val transport = TransportFactory.create(config)
-        val connectionState = MutableStateFlow(ConnectionState.Disconnected)
+        val connectionState = MutableStateFlow(ConnectionState.Connected)
         val lastError = MutableStateFlow<String?>(null)
 
-        transport.connectionState?.let { flow ->
-            scope.launch {
-                flow.collect { state ->
-                    connectionState.value = when (state) {
-                        is SseConnectionState.Disconnected -> ConnectionState.Disconnected
-                        is SseConnectionState.Connecting -> ConnectionState.Connecting
-                        is SseConnectionState.Connected -> ConnectionState.Connected
-                        is SseConnectionState.Reconnecting -> ConnectionState.Reconnecting
-                        is SseConnectionState.Failed -> {
-                            lastError.value = state.error
-                            ConnectionState.Failed
-                        }
-                    }
-                }
-            }
-        }
+        val client = Client(
+            clientInfo = Implementation(name = "mckli", version = "1.0.0")
+        )
 
-        scope.launch {
-            if (config.transport == TransportType.SSE) {
-                connectionState.value = ConnectionState.Connecting
-            }
-            val result = transport.connect()
-            if (result.isFailure) {
-                lastError.value = result.exceptionOrNull()?.message
-                connectionState.value = ConnectionState.Failed
-            } else if (config.transport == TransportType.HTTP) {
-                connectionState.value = ConnectionState.Connected
-            }
-        }
+        client.connect(transport)
+        // SseConnectionState is from our McpTransport, but Transport is now SDK's.
+        // We'll need to wrap or handle this if we want to keep the flow.
+//        (transport as StreamableHttpClientTransport).connectionState?.let { flow ->
+//            scope.launch {
+//                flow.collect { state ->
+//                    logger.info { "Server connection state: $state" }
+//                    connectionState.value = when (state) {
+//                        is SseConnectionState.Disconnected -> ConnectionState.Disconnected
+//                        is SseConnectionState.Connecting -> ConnectionState.Connecting
+//                        is SseConnectionState.Connected -> ConnectionState.Connected
+//                        is SseConnectionState.Reconnecting -> ConnectionState.Reconnecting
+//                        is SseConnectionState.Failed -> {
+//                            lastError.value = state.error
+//                            ConnectionState.Failed
+//                        }
+//                    }
+//                }
+//            }
+//        }
+
+//        scope.launch {
+//            if (config.transport == TransportType.SSE) {
+//                connectionState.value = ConnectionState.Connecting
+//            }
+//            try {
+//                logger.info { "Connecting to ${config.name} via ${config.transport}..." }
+//                client.connect(transport)
+//                logger.info { "Successfully connected to ${config.name}" }
+//                connectionState.value = ConnectionState.Connected
+//            } catch (e: Exception) {
+//                logger.error(e) { "Failed to connect to ${config.name}" }
+//                lastError.value = e.message
+//                connectionState.value = ConnectionState.Failed
+//            }
+//        }.invokeOnCompletion { cause ->
+//            if (cause == null && connectionState.value == ConnectionState.Connecting) {
+//                connectionState.value = ConnectionState.Connected
+//            }
+//        }
 
         val pool = ConnectionPool(config, transport)
-        val cache = ToolCache(pool)
+        val cache = ToolCache(client)
 
         // Pre-fetch tools
         scope.launch {
             // Wait for transport to be connected if needed
-            var count = 0
-            while (connectionState.value != ConnectionState.Connected && count < 50) {
-                delay(100)
-                count++
-            }
+//            var count = 0
+//            while (connectionState.value != ConnectionState.Connected && count < 50) {
+//                delay(100)
+//                count++
+//            }
             try {
                 cache.refresh()
             } catch (e: Exception) {
@@ -115,6 +135,7 @@ class DaemonManager {
             connectionPool = pool,
             toolCache = cache,
             transport = transport,
+            client = client,
             connectionState = connectionState,
             lastError = lastError
         )
@@ -122,7 +143,8 @@ class DaemonManager {
 
     private suspend fun shutdownContext(context: ServerContext) {
         try {
-            context.transport.close()
+            // context.transport.close() // Transport interface might not have close, but Client.close() should handle it
+            context.client.close()
             context.connectionPool.shutdown()
         } catch (e: Exception) {
             logger.error(e) { "Error shutting down context for ${context.config.name}" }
