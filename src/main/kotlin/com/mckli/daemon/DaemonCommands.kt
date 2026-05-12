@@ -1,5 +1,5 @@
 package com.mckli.daemon
- 
+
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
@@ -8,11 +8,12 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.mckli.config.ServerConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
- 
+
 private val logger = KotlinLogging.logger {}
- 
+
 class DaemonCommand : CliktCommand(name = "daemon") {
     override fun help(context: Context) = "Manage the unified MCP server daemon"
+
     init {
         subcommands(
             DaemonStartCommand(),
@@ -31,8 +32,8 @@ private fun getDummyConfig(): ServerConfig {
 
 class DaemonStartCommand : CliktCommand(name = "start") {
     override fun help(context: Context) = "Start the unified daemon"
- 
-    override fun run() {
+
+    override fun run() = runBlocking {
         logger.info { "Starting unified daemon" }
         val daemon = DaemonProcess(getDummyConfig())
         daemon.start().fold(
@@ -50,9 +51,9 @@ class DaemonStartCommand : CliktCommand(name = "start") {
 
 class DaemonStopCommand : CliktCommand(name = "stop") {
     override fun help(context: Context) = "Stop the unified daemon"
- 
+
     private val force by option("--force", "-f", help = "Force kill daemon").flag(default = false)
- 
+
     override fun run() {
         logger.info { "Stopping unified daemon (force=$force)" }
         val daemon = DaemonProcess(getDummyConfig())
@@ -70,7 +71,7 @@ class DaemonStopCommand : CliktCommand(name = "stop") {
 
 class DaemonStatusCommand : CliktCommand(name = "status") {
     override fun help(context: Context) = "Show status of the unified daemon"
- 
+
     override fun run() {
         logger.info { "Checking unified daemon status" }
         val daemon = DaemonProcess(getDummyConfig())
@@ -79,7 +80,7 @@ class DaemonStatusCommand : CliktCommand(name = "status") {
 
         if (isRunning) {
             echo("Unified daemon: RUNNING" + (if (pid != null) " (PID: $pid)" else ""))
-            
+
             // Try to get detailed status via HTTP
             runBlocking {
                 val client = DaemonHttpClient()
@@ -101,8 +102,8 @@ class DaemonStatusCommand : CliktCommand(name = "status") {
 
 class DaemonRestartCommand : CliktCommand(name = "restart") {
     override fun help(context: Context) = "Restart the unified daemon"
- 
-    override fun run() {
+
+    override fun run() = runBlocking {
         logger.info { "Restarting unified daemon" }
         val daemon = DaemonProcess(getDummyConfig())
 

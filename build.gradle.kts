@@ -32,7 +32,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 dependencies {
     val ktorVersion = "3.4.3"
 
-    implementation("io.modelcontextprotocol:kotlin-sdk:0.11.1")
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.12.0")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
     implementation("com.github.ajalt.clikt:clikt:5.1.0")
     implementation("io.ktor:ktor-client-core:$ktorVersion")

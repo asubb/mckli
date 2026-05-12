@@ -15,7 +15,7 @@ val json = Json {
 
 class ConfigManager() {
     fun getConfigPath(): String {
-        val configDirStr = System.getProperty("mckli.config.dir") ?: System.getenv("MCKLI_CONFIG_DIR")
+        val configDirStr = System.getenv("MCKLI_CONFIG_DIR") ?: System.getProperty("mckli.config.dir")
         val configDir = if (configDirStr != null) {
             File(configDirStr)
         } else {
@@ -31,7 +31,7 @@ class ConfigManager() {
     }
 
     fun getDaemonsPath(): String {
-        val daemonsDirStr = System.getProperty("mckli.daemons.dir") ?: System.getenv("MCKLI_DAEMONS_DIR")
+        val daemonsDirStr = System.getenv("MCKLI_DAEMONS_DIR") ?: System.getProperty("mckli.daemons.dir")
         val daemonsDir = if (daemonsDirStr != null) {
             File(daemonsDirStr)
         } else {

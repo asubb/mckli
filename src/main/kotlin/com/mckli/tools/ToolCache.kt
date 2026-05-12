@@ -1,6 +1,5 @@
 package com.mckli.tools
 
-import com.mckli.http.ConnectionPool
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.types.*
@@ -10,12 +9,7 @@ import kotlinx.serialization.json.*
 
 private val logger = KotlinLogging.logger {}
 
-class ToolCache(private val client: Client) {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        encodeDefaults = true
-    }
+class ToolCache(private val clientName: String, private val client: Client) {
     private val mutex = Mutex()
     private val tools = mutableMapOf<String, ToolMetadata>()
 
@@ -33,8 +27,8 @@ class ToolCache(private val client: Client) {
                 }
             }
         } catch (e: Exception) {
-            logger.error(e) { "Failed to fetch tools: ${e.message}" }
-            throw ToolCacheException("Failed to fetch tools: ${e.message}", e)
+            logger.error(e) { "[clientName=${clientName}] Failed to fetch tools: ${e.message}" }
+            throw ToolCacheException("[clientName=${clientName}] Failed to fetch tools: ${e.message}", e)
         }
     }
 
@@ -54,21 +48,15 @@ class ToolCache(private val client: Client) {
     suspend fun getTool(name: String, autoRefresh: Boolean = false): ToolMetadata? {
         val tool = mutex.withLock { tools[name] }
         if (tool == null && autoRefresh) {
-            logger.debug { "Tool '$name' not found in cache, refreshing..." }
+            logger.debug { "[clientName=${clientName}] Tool '$name' not found in cache, refreshing..." }
             try {
                 refresh()
             } catch (e: Exception) {
-                logger.error(e) { "Failed to refresh tool cache for $name" }
+                logger.error(e) { "[clientName=${clientName}] Failed to refresh tool cache for $name" }
             }
             return mutex.withLock { tools[name] }
         }
         return tool
-    }
-
-    suspend fun getToolCount(): Int {
-        return mutex.withLock {
-            tools.size
-        }
     }
 
     suspend fun callTool(
@@ -76,7 +64,7 @@ class ToolCache(private val client: Client) {
         arguments: JsonObject?
     ): Result<JsonElement> {
         val tool = getTool(toolName, autoRefresh = true)
-            ?: return Result.failure(ToolCacheException("Tool '$toolName' not found"))
+            ?: return Result.failure(ToolCacheException("[clientName=${clientName}] Tool '$toolName' not found"))
 
         return runCatching {
             val result = client.callTool(toolName, arguments?.toMap() ?: emptyMap())

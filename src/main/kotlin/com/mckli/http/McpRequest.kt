@@ -28,13 +28,6 @@ data class McpNotification(
 ) : McpMessage
 
 @Serializable
-data class McpInitializeParams(
-    val protocolVersion: String,
-    val capabilities: JsonObject = buildJsonObject {},
-    val clientInfo: McpClientInfo
-)
-
-@Serializable
 data class McpClientInfo(
     val name: String,
     val version: String
@@ -47,13 +40,6 @@ data class McpResponse(
     val method: String? = null,
     val result: JsonElement? = null,
     val error: McpError? = null
-)
-
-@Serializable
-data class McpInitializeResult(
-    val protocolVersion: String,
-    val capabilities: JsonObject,
-    val serverInfo: McpServerInfo
 )
 
 @Serializable

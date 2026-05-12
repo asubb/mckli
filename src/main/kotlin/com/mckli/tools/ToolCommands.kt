@@ -1,5 +1,5 @@
 package com.mckli.tools
- 
+
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.subcommands
@@ -11,15 +11,16 @@ import com.mckli.client.RequestRouter
 import com.mckli.config.ConfigManager
 import com.mckli.config.Configuration
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.encodeToString
- 
+
 private val logger = KotlinLogging.logger {}
- 
+
 class ToolsCommand : CliktCommand(name = "tools") {
     override fun help(context: Context) = "Manage and invoke MCP tools"
+
     init {
         subcommands(
             ToolsListCommand(),
@@ -48,7 +49,7 @@ class ToolsListCommand : CliktCommand(name = "list") {
         prettyPrint = true
     }
 
-    override fun run() {
+    override fun run() = runBlocking {
         val configManager = ConfigManager()
         val config = configManager.readConfig() ?: Configuration()
 
@@ -60,7 +61,7 @@ class ToolsListCommand : CliktCommand(name = "list") {
 
         if (serversToQuery.isEmpty()) {
             echo("No servers configured", err = true)
-            return
+            return@runBlocking
         }
 
         val allTools = mutableMapOf<String, List<ToolMetadata>>()
@@ -143,7 +144,7 @@ class ToolsSearchCommand : CliktCommand(name = "search") {
 
     private val searchService = ToolSearchService(json)
 
-    override fun run() {
+    override fun run() = runBlocking {
         val configManager = ConfigManager()
         val config = configManager.readConfig() ?: Configuration()
 
@@ -181,7 +182,11 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
         encodeDefaults = true
     }
 
-    override fun run() {
+    private val prettyJson = Json {
+        prettyPrint = true
+    }
+
+    override fun run(): Unit = runBlocking {
         logger.info { "Describing tool: $toolName from server: $server" }
         val router = RequestRouter(server)
 
@@ -195,7 +200,7 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
 
                     tool.inputSchema?.let { schema ->
                         echo("\nInput Schema:")
-                        echo(Json { prettyPrint = true }.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), schema))
+                        echo(prettyJson.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), schema))
                     }
                 } catch (e: Exception) {
                     logger.error(e) { "Error parsing tool details: ${e.message}. Raw result: $result" }
@@ -213,15 +218,15 @@ class ToolsDescribeCommand : CliktCommand(name = "describe") {
 
 class ToolsRefreshCommand : CliktCommand(name = "refresh") {
     override fun help(context: Context) = "Refresh tool cache from MCP server"
- 
+
     private val server by argument(help = "Server name").optional()
- 
-    override fun run() {
+
+    override fun run() = runBlocking {
         logger.info { "Refreshing tools from server: ${server ?: "default"}" }
         val router = RequestRouter(server)
 
         router.refreshTools().fold(
-            onSuccess = { result ->
+            onSuccess = { _ ->
                 echo("Tools refreshed successfully")
             },
             onFailure = { error ->
@@ -234,12 +239,14 @@ class ToolsRefreshCommand : CliktCommand(name = "refresh") {
 
 class ToolsCallCommand : CliktCommand(name = "call") {
     override fun help(context: Context) = "Invoke an MCP tool"
- 
+
     private val server by argument(help = "Server name").optional()
     private val toolName by argument(help = "Tool name")
     private val jsonArgs by option("--json", "-j", help = "Tool arguments as JSON")
- 
-    override fun run() {
+
+    private val prettyJson = Json { prettyPrint = true }
+
+    override fun run() = runBlocking {
         logger.info { "Calling tool: $toolName from server: ${server ?: "default"} with args: $jsonArgs" }
         val router = RequestRouter(server)
 
@@ -254,7 +261,12 @@ class ToolsCallCommand : CliktCommand(name = "call") {
 
         router.callTool(toolName, arguments).fold(
             onSuccess = { result ->
-                echo(Json { prettyPrint = true }.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), result))
+                echo(
+                    prettyJson.encodeToString(
+                        kotlinx.serialization.json.JsonElement.serializer(),
+                        result
+                    )
+                )
             },
             onFailure = { error ->
                 echo("Error calling tool: ${error.message}", err = true)

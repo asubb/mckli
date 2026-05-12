@@ -3,10 +3,14 @@ package com.mckli.daemon
 import com.mckli.config.ConfigManager
 import com.mckli.config.ServerConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
 
-private val log = KotlinLogging.logger {  }
+private val log = KotlinLogging.logger { }
 
 class DaemonProcess(private val config: ServerConfig) {
     private val configManager = ConfigManager()
@@ -22,7 +26,7 @@ class DaemonProcess(private val config: ServerConfig) {
         log.info { "Initialized unified daemon process, daemon directory: ${daemonsDir.absolutePath}" }
     }
 
-    fun start(): Result<Unit> {
+    suspend fun start(): Result<Unit> {
         return try {
             // Check if already running
             if (isRunning()) {
@@ -39,13 +43,14 @@ class DaemonProcess(private val config: ServerConfig) {
 
             // Spawn daemon process
             val args = mutableListOf(javaBin, "-cp", classpath)
-            
+
             // Pass configuration and daemon directory properties if they are set
-            System.getProperty("mckli.config.dir")?.let { args.add("-Dmckli.config.dir=$it") }
-            System.getProperty("mckli.daemons.dir")?.let { args.add("-Dmckli.daemons.dir=$it") }
-            System.getProperty("java.class.path")?.let { args.add("-Djava.class.path=$it") }
-            
-            args.add("-DMCKLI_LOG_DIR=${daemonsDir.absolutePath}")
+            args.populate("MCKLI_CONFIG_DIR", "mckli.config.dir")
+            args.populate("MCKLI_DAEMONS_DIR", "mckli.daemons.dir")
+            args.populate("MCKLI_LOG_DIR", "mckli.daemons.dir")
+            args.populate("MCKLI_DAEMON_LOG_NAME", "mckli.daemon.log.name")
+            args.add("-Dmckli.log.appender=DAEMON_FILE")
+
             args.add("com.mckli.daemon.DaemonMainKt")
 
             log.debug { "Spawning unified daemon: ${args.joinToString(" ")}" }
@@ -60,17 +65,20 @@ class DaemonProcess(private val config: ServerConfig) {
             var waited = 0L
             val waitStep = 100L
             val maxWait = 5000L
-            
+
             while (waited < maxWait) {
-                Thread.sleep(waitStep)
+                delay(waitStep)
                 waited += waitStep
                 if (!process.isAlive) break
             }
+
 
             if (!process.isAlive) {
                 val exitCode = process.exitValue()
                 return Result.failure(DaemonException("Daemon failed to start (exit code: $exitCode)"))
             }
+
+            log.debug { "Process started" }
 
             // Write PID file
             // Let the daemon write its own PID file or do it here
@@ -79,9 +87,9 @@ class DaemonProcess(private val config: ServerConfig) {
 
             // Wait for HTTP server to be ready
             var ready = false
-            val httpClient = java.net.http.HttpClient.newHttpClient()
-            val request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create("http://127.0.0.1:5030/health"))
+            val httpClient = HttpClient.newHttpClient()
+            val request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:5030/health"))
                 .GET()
                 .build()
 
@@ -106,6 +114,10 @@ class DaemonProcess(private val config: ServerConfig) {
         } catch (e: Exception) {
             Result.failure(DaemonException("Failed to start daemon: ${e.message}", e))
         }
+    }
+
+    private fun MutableList<String>.populate(envKey: String, propertyKey: String) {
+        (System.getenv(envKey) ?: System.getProperty(propertyKey))?.let { add("-D$propertyKey=$it") }
     }
 
     fun stop(force: Boolean = false): Result<Unit> {
@@ -167,13 +179,9 @@ class DaemonProcess(private val config: ServerConfig) {
 
         return try {
             pidFile.readText().trim().toIntOrNull()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
-    }
-
-    fun getSocketPath(): String {
-        return pidFile.parentFile.absolutePath + "/daemon.sock" // Not used for connection anymore, but kept for tests/compatibility
     }
 
     private fun cleanup() {

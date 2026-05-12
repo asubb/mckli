@@ -25,7 +25,7 @@ internal class ToolSearchService(
         prettyPrint = true
     }
 ) {
-    fun searchAcrossServers(servers: List<ServerConfig>, query: String): List<SearchResult> {
+    suspend fun searchAcrossServers(servers: List<ServerConfig>, query: String): List<SearchResult> {
         val results = mutableListOf<SearchResult>()
         servers.forEach { serverConfig ->
             val router = RequestRouter(serverConfig.name)

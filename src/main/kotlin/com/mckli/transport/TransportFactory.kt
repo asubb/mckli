@@ -2,6 +2,7 @@ package com.mckli.transport
 
 import com.mckli.config.ServerConfig
 import com.mckli.config.TransportType
+import io.ktor.client.request.*
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.Transport
@@ -32,8 +33,16 @@ object TransportFactory {
                 url = config.endpoint
             )
             TransportType.SSE -> {
-                val sseClient = client.config {
+                val sseClient = HttpClient(CIO) {
                     install(SSE)
+                    install(HttpTimeout) {
+                        connectTimeoutMillis = config.timeout
+                    }
+                    install(ContentNegotiation) {
+                        json(Json {
+                            ignoreUnknownKeys = true
+                        })
+                    }
                 }
                 SseClientTransport(
                     client = sseClient,

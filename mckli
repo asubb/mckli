@@ -2,6 +2,19 @@
 
 set -e
 
+if [[ "$1" == "--kill" ]]; then
+    # Kill only mckli Java processes (MainKt or DaemonMainKt)
+    # We look for 'java' and the specific main classes
+    pids=$(ps aux | grep java | grep -E "com\.mckli\.(MainKt|daemon\.DaemonMainKt)" | grep -v grep | awk '{print $2}')
+    if [ -n "$pids" ]; then
+        echo "Killing mckli instances: $pids"
+        kill -9 $pids || true
+    else
+        echo "No mckli instances found."
+    fi
+    exit 0
+fi
+
 ./gradlew installDist
 
 export MCKLI_CONFIG_DIR=$(pwd)/.test-home/

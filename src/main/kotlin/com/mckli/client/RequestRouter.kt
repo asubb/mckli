@@ -5,11 +5,10 @@ import com.mckli.config.ServerConfig
 import com.mckli.daemon.DaemonProcess
 import com.mckli.daemon.DaemonHttpClient
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
@@ -17,11 +16,7 @@ class RequestRouter(private val serverName: String?) {
     private val configManager = ConfigManager()
     private val daemonClient = DaemonHttpClient()
 
-    fun sendMcpRequest(method: String, params: JsonElement?): Result<JsonElement> {
-        return Result.failure(RouterException("Direct MCP requests not supported via HTTP API yet"))
-    }
-
-    fun listTools(filter: String?): Result<JsonElement> {
+    suspend fun listTools(filter: String?): Result<JsonElement> {
         return executeRequest { serverName ->
             daemonClient.listTools(serverName, filter).map { 
                 Json.encodeToJsonElement(
@@ -32,7 +27,7 @@ class RequestRouter(private val serverName: String?) {
         }
     }
 
-    fun describeTool(toolName: String): Result<JsonElement> {
+    suspend fun describeTool(toolName: String): Result<JsonElement> {
         return executeRequest { serverName ->
              daemonClient.listTools(serverName).map { tools ->
                 val tool = tools.find { it.name == toolName }
@@ -45,19 +40,19 @@ class RequestRouter(private val serverName: String?) {
         }
     }
 
-    fun callTool(toolName: String, arguments: JsonElement?): Result<JsonElement> {
+    suspend fun callTool(toolName: String, arguments: JsonElement?): Result<JsonElement> {
         return executeRequest { serverName ->
             daemonClient.callTool(serverName, toolName, arguments)
         }
     }
 
-    fun refreshTools(): Result<String> {
+    suspend fun refreshTools(): Result<String> {
         return executeRequest { serverName ->
             daemonClient.refreshTools(serverName)
         }
     }
 
-    private fun <T> executeRequest(
+    private suspend fun <T> executeRequest(
         block: suspend (String) -> Result<T>
     ): Result<T> = try {
         val serverConfig = getServerConfig(serverName, configManager)
@@ -73,12 +68,10 @@ class RequestRouter(private val serverName: String?) {
 
             // Give daemon time to initialize
             logger.debug { "Waiting for daemon to initialize..." }
-            Thread.sleep(2000)
+            delay(2000)
         }
 
-        runBlocking {
-            block(serverConfig.name)
-        }
+        block(serverConfig.name)
     } catch (e: Exception) {
         logger.error(e) { "Unexpected router error" }
         Result.failure(RouterException("Router error: ${e.message}", e))
@@ -96,7 +89,5 @@ internal fun getServerConfig(serverName: String?, configManager: ConfigManager):
     return config.servers.find { it.name == selectedName }
         ?: throw RouterException("Server '$selectedName' not found")
 }
-
-internal fun generateRequestId(): String = UUID.randomUUID().toString()
 
 class RouterException(message: String, cause: Throwable? = null) : Exception(message, cause)

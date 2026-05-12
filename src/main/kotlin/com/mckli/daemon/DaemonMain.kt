@@ -13,16 +13,17 @@ fun main(args: Array<String>) {
     runBlocking {
         try {
             val daemon = UnifiedDaemon()
-            
+
             // Start the HTTP server
             val server = UnifiedDaemonServer(daemon.getDaemonManager())
             server.start()
-            
+
             daemon.start()
         } catch (e: Exception) {
             System.err.println("Daemon error: ${e.message}")
             e.printStackTrace()
             logger.error(e) { "Daemon execution failed" }
+            delay(5000) // give some time to flush the logs
             exitProcess(1)
         }
     }
