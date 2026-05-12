@@ -1,4 +1,6 @@
 <configuration debug="false">
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+
     <appender name="DAEMON_FILE" class="ch.qos.logback.core.FileAppender">
         <file>${MCKLI_LOG_DIR:-${user.home}/.mckli/daemons}/mckli-daemon.log</file>
         <append>true</append>

@@ -15,7 +15,10 @@ if [[ "$1" == "--kill" ]]; then
     exit 0
 fi
 
-./gradlew installDist
+if ! gradle_output=$(./gradlew installDist 2>&1); then
+    echo "$gradle_output"
+    exit 1
+fi
 
 export MCKLI_CONFIG_DIR=$(pwd)/.test-home/
 export MCKLI_LOG_DIR=$(pwd)/.test-home/logs/

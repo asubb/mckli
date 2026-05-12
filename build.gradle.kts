@@ -33,7 +33,7 @@ dependencies {
     val ktorVersion = "3.4.3"
 
     implementation("io.modelcontextprotocol:kotlin-sdk:0.12.0")
-    implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+    implementation("io.github.oshai:kotlin-logging-jvm:8.0.02")
     implementation("com.github.ajalt.clikt:clikt:5.1.0")
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
@@ -63,7 +63,11 @@ tasks.jar {
 }
 
 tasks.startScripts {
-    defaultJvmOpts = listOf("--enable-native-access=ALL-UNNAMED")
+    defaultJvmOpts = listOf(
+        "--enable-native-access=ALL-UNNAMED",
+        "-Doshai.kotlinlogging.skipLogbackConfigurationCheck=true",
+        "-Dlogback.statusListenerClass=ch.qos.logback.core.status.NopStatusListener"
+    )
 }
 
 tasks.test {

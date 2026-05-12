@@ -7,9 +7,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 
-private val logger = KotlinLogging.logger {}
-
 class ToolCache(private val clientName: String, private val client: Client) {
+    private val logger = KotlinLogging.logger {}
     private val mutex = Mutex()
     private val tools = mutableMapOf<String, ToolMetadata>()
 

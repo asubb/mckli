@@ -1,12 +1,14 @@
 package com.mckli.daemon
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import kotlinx.coroutines.*
 import kotlin.system.exitProcess
 
-private val logger = KotlinLogging.logger {}
-
 fun main(args: Array<String>) {
+    KotlinLoggingConfiguration.logStartupMessage = false
+
+    val logger = KotlinLogging.logger {}
     // Daemon uses its own logger with specific appender in logback.xml
     logger.debug { "Daemon entry point hit" }
 

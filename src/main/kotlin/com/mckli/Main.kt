@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.core.subcommands
 import com.mckli.config.ConfigCommand
 import com.mckli.daemon.DaemonCommand
 import com.mckli.tools.ToolsCommand
+import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 
 /**
  * MCP CLI Wrapper
@@ -19,10 +20,15 @@ import com.mckli.tools.ToolsCommand
  * - daemon: Manage daemon processes
  * - tools: Discover and invoke MCP tools
  */
-fun main(args: Array<String>) = MckliCommand()
-    .subcommands(
-        ConfigCommand(),
-        DaemonCommand(),
-        ToolsCommand()
-    )
-    .main(args)
+fun main(args: Array<String>) {
+    // Suppress initialization messages from kotlin-logging and logback
+    KotlinLoggingConfiguration.logStartupMessage = false
+
+    MckliCommand()
+        .subcommands(
+            ConfigCommand(),
+            DaemonCommand(),
+            ToolsCommand()
+        )
+        .main(args)
+}
