@@ -9,18 +9,21 @@ mckli uses Cucumber (BDD framework) for integration testing, allowing us to writ
 ## Test Structure
 
 ```
-src/jvmTest/
+src/test/
 ├── kotlin/com/mckli/integration/
 │   ├── CucumberTestRunner.kt          # JUnit test runner
 │   ├── steps/                         # Step definitions
 │   │   ├── ConfigurationSteps.kt      # Config management steps
 │   │   ├── DaemonSteps.kt             # Daemon lifecycle steps
+│   │   ├── SseTransportSteps.kt       # SSE transport specific steps
 │   │   └── ToolSteps.kt               # Tool discovery/invocation steps
 │   └── support/
-│       └── MockMcpServer.kt           # Mock MCP server for testing
+│       ├── MockMcpServer.kt           # Mock MCP server (HTTP)
+│       └── MockSseServer.kt           # Mock SSE server
 └── resources/features/                # Gherkin feature files
     ├── configuration.feature          # Configuration scenarios
-    ├── daemon-lifecycle.feature       # Daemon management scenarios
+    ├── daemon-lifecycle.feature       # Unified daemon scenarios
+    ├── sse-transport.feature          # SSE transport scenarios
     ├── tool-discovery.feature         # Tool discovery scenarios
     └── tool-invocation.feature        # Tool execution scenarios
 ```
@@ -83,21 +86,19 @@ Scenario: Add a new server configuration
 
 ### Daemon Lifecycle Feature
 
-Tests daemon process management:
-- Starting/stopping daemons
+Tests unified daemon process management:
+- Starting/stopping the unified daemon
 - Status checking
-- Auto-start behavior
-- Multiple concurrent daemons
+- Auto-start behavior on first request
+- Connection states for individual servers
 
 **Example scenario:**
 ```gherkin
 Scenario: Basic daemon lifecycle
-  When I start the daemon for server "testserver"
-  Then the daemon for "testserver" should be running
-  When I restart the daemon for "testserver"
-  Then the daemon for "testserver" should be running
-  When I stop the daemon for "testserver"
-  Then the daemon for "testserver" should not be running
+  When I start the unified daemon
+  Then the unified daemon should be running
+  When I stop the unified daemon
+  Then the unified daemon should not be running
 ```
 
 ### Tool Discovery Feature

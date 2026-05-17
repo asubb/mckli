@@ -19,11 +19,12 @@ A Kotlin-based CLI tool that acts as a bridge between LLMs and MCP (Model Contex
     ┌────▼─────┐
     │   mckli  │ (Stateless CLI)
     └────┬─────┘
-         │ HTTP API
+         │ HTTP API (Port 5030)
     ┌────▼───────────────┐
-    │    Daemon          │
+    │   Unified Daemon   │
     │  - Connection Pool │
     │  - Tool Cache      │
+    │  - Multi-server    │
     └────┬───────────────┘
          │ Persistent HTTP / SSE
     ┌────▼────────────┐
@@ -51,22 +52,21 @@ Alternatively, build it from source:
 ### 2. Basic Usage
 
 ```bash
-# 1. Add an MCP server
-mckli config add myserver https://mcp.example.com/api
+# 1. Add an MCP server (SSE is default)
+mckli config add myserver https://mcp.example.com/sse
 
 # 2. Search for tools across all servers
 mckli tools search "read"
 
-# 3. List available tools for a specific server (daemons start automatically)
+# 3. List available tools for a specific server (daemon starts automatically)
 mckli tools list myserver
 
 # 4. Call a tool
 mckli tools call myserver read-file --json '{"path": "config.json"}'
 
-# 5. Get help for any command
-mckli --help
-mckli tools --help
-mckli tools call --help
+# 5. Manage the unified daemon
+mckli daemon status
+mckli daemon stop
 ```
 
 ### Example: Claude Subagent Skill Integration
@@ -78,7 +78,7 @@ When defining a skill for a Claude subagent, provide clear explanations of how t
 ```markdown
 ### MCP Tool Interaction
 
-To interact with the connected MCP servers, use the `mckli` CLI tool. It manages persistent connections via a background daemon.
+To interact with the connected MCP servers, use the `mckli` CLI tool. It manages persistent connections via a background unified daemon.
 
 **Command Structure:**
 `mckli tools call <server-name> <tool-name> --json '<arguments>'`
@@ -87,6 +87,7 @@ To interact with the connected MCP servers, use the `mckli` CLI tool. It manages
 - `mckli tools search <query>`: **CRITICAL**: Use this first to find which server provides the tool you need. It searches across ALL configured servers.
 - `mckli tools list <server-name>`: Use this to discover all available tools and their required JSON schemas for a specific server.
 - `mckli tools call <server-name> <tool-name> --json '<json-args>'`: Use this to execute a tool. Always ensure the `--json` argument is a valid, single-quoted JSON string.
+- `mckli daemon status`: Check the status of the background daemon and its connections to MCP servers.
 - `mckli <command> --help`: Use this for any command to see available subcommands and flags.
 
 **Example Usage:**

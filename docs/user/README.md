@@ -29,32 +29,20 @@ Complete guide to using mckli for wrapping MCP servers with persistent daemon co
    git clone <repository-url>
    cd mckli
 
-   # Build self-contained JAR
-   ./gradlew fatJar
-
-   # Or build native binary (faster startup)
-   ./gradlew linkReleaseExecutableNative
+   # Build and install to local directory
+   ./gradlew installDist
+   
+   # Add to PATH (example for bash)
+   export PATH="$PATH:$(pwd)/build/install/mckli/bin"
    ```
 
    **Option B: Download release**
    ```bash
-   # Download from releases page
-   # Extract and verify
+   # Use the installation script
+   curl -sL https://raw.githubusercontent.com/asubb/mckli/refs/heads/main/scripts/install.sh | bash
    ```
 
-3. **Install the binary**
-   ```bash
-   # For JAR
-   sudo cp build/libs/mckli-all.jar /usr/local/bin/
-   echo 'alias mckli="java --enable-native-access=ALL-UNNAMED -jar /usr/local/bin/mckli-all.jar"' >> ~/.bashrc
-   source ~/.bashrc
-
-   # For native binary
-   sudo cp build/bin/native/releaseExecutable/mckli.kexe /usr/local/bin/mckli
-   sudo chmod +x /usr/local/bin/mckli
-   ```
-
-4. **Verify installation**
+3. **Verify installation**
    ```bash
    mckli --help
    ```
@@ -63,12 +51,12 @@ Complete guide to using mckli for wrapping MCP servers with persistent daemon co
 
 1. **Add your first MCP server**
    ```bash
-   mckli config add myserver https://mcp.example.com/api
+   mckli config add myserver https://mcp.example.com/sse
    ```
 
-2. **Start the daemon**
+2. **Check daemon status (starts automatically on first request)**
    ```bash
-   mckli daemon start myserver
+   mckli daemon status
    ```
 
 3. **Search for tools**
@@ -99,20 +87,28 @@ Complete guide to using mckli for wrapping MCP servers with persistent daemon co
 
 ### Adding Servers
 
-#### Basic Configuration
+#### Basic Configuration (SSE)
 ```bash
-mckli config add myserver https://mcp.example.com/api
+mckli config add myserver https://mcp.example.com/sse
 ```
+
+#### Explicit Transport Type
+```bash
+# Force HTTP instead of default SSE
+mckli config add legacy-server https://mcp.example.com/api --transport HTTP
+```
+
+### Authentication
 
 #### With Bearer Token Authentication
 ```bash
-mckli config add myserver https://mcp.example.com/api \
+mckli config add myserver https://mcp.example.com/sse \
   --token "your-bearer-token-here"
 ```
 
 #### With Basic Authentication
 ```bash
-mckli config add myserver https://mcp.example.com/api \
+mckli config add myserver https://mcp.example.com/sse \
   --username "myuser" \
   --password "mypassword"
 ```
@@ -177,14 +173,20 @@ You can then edit it manually:
 
 ## Daemon Management
 
-### Starting Daemons
+### Unified Daemon
+
+The `mckli` tool uses a single background "Unified Daemon" to manage all configured MCP servers. This improves performance and simplifies resource management.
+
+### Starting the Daemon
+
+The daemon **starts automatically** the first time you run a `tools` command (like `list` or `search`). You don't usually need to start it manually.
 
 ```bash
-# Start a specific daemon
-mckli daemon start myserver
+# Explicitly start the daemon
+mckli daemon start
 
-# Daemons auto-start on first tool use
-mckli tools list myserver  # Starts daemon automatically if not running
+# Check status
+mckli daemon status
 ```
 
 ### Checking Status
@@ -195,62 +197,59 @@ mckli daemon status
 
 Output:
 ```
-Daemon status:
-  myserver: RUNNING (PID: 12345)
-    Socket: /home/user/.mckli/daemons/myserver.sock
-  otherserver: STOPPED
+Daemon: RUNNING (PID: 12345)
+Port: 5030
+
+Managed Servers:
+  myserver: Connected
+  otherserver: Connected
 ```
 
-### Stopping Daemons
+### Stopping the Daemon
 
 ```bash
-# Graceful shutdown (waits up to 10 seconds)
-mckli daemon stop myserver
+# Graceful shutdown (stops all managed server connections)
+mckli daemon stop
 
 # Force kill immediately
-mckli daemon stop myserver --force
-```
-
-### Restarting Daemons
-
-```bash
-mckli daemon restart myserver
+mckli daemon stop --force
 ```
 
 ### Understanding Daemon Logs
 
 Logs are stored in `~/.mckli/daemons/`:
-- `<server>.log` - Standard output
-- `<server>.err` - Error output
-- `<server>.pid` - Process ID file
-- `<server>.sock` - Unix domain socket
+- `daemon.log` - Unified daemon standard output
+- `daemon.err` - Unified daemon error output
+- `daemon.pid` - Process ID file
 
 **View logs:**
 ```bash
 # Standard output
-cat ~/.mckli/daemons/myserver.log
+cat ~/.mckli/daemons/daemon.log
 
 # Errors
-cat ~/.mckli/daemons/myserver.err
+cat ~/.mckli/daemons/daemon.err
 
 # Tail live logs
-tail -f ~/.mckli/daemons/myserver.log
+tail -f ~/.mckli/daemons/daemon.log
 ```
 
-### SSE Transport (JVM only)
+### SSE Transport
 
-For servers that support real-time streaming:
+The `mckli` tool supports both standard HTTP and SSE (Server-Sent Events) transports for MCP.
 
 ```bash
-# Add an SSE server
-mckli config add streaming-server https://mcp.example.com/sse --transport SSE
+# Add an SSE server (default)
+mckli config add streaming-server https://mcp.example.com/sse
+
+# Force HTTP for older servers
+mckli config add legacy-server https://mcp.example.com/api --transport HTTP
 ```
 
 SSE features:
-- **Persistent connection**: The daemon maintains a long-lived SSE stream.
-- **Dynamic endpoints**: Automatically handles dynamic POST endpoints provided by the server.
+- **Persistent connection**: The daemon maintains a long-lived SSE stream, avoiding the overhead of repeated connections.
+- **Bi-directional events**: Efficiently handles server-initiated events.
 - **Auto-reconnect**: Automatically reconnects with exponential backoff if the stream is interrupted.
-- **Real-time updates**: Tools are updated in real-time if the server provides tool events.
 
 ---
 

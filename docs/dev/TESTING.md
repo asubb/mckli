@@ -5,17 +5,18 @@ Documentation for running and writing tests for mckli.
 ## Test Structure
 
 ```
-src/commonTest/kotlin/com/mckli/
+src/test/kotlin/com/mckli/
 ├── config/
 │   ├── ConfigValidatorTest.kt       # Configuration validation
 │   └── ServerConfigTest.kt          # Configuration serialization
 ├── http/
-│   ├── McpRequestTest.kt            # MCP protocol messages
-│   └── ConnectionPoolTest.kt        # Connection pool lifecycle
-├── ipc/
-│   └── IpcMessageTest.kt            # IPC protocol messages
+│   └── McpRequestTest.kt            # MCP protocol messages
+├── transport/
+│   ├── TransportFactoryTest.kt      # SSE/HTTP selection
+│   └── ReconnectionStrategyTest.kt  # Backoff logic
 └── tools/
-    └── ToolMetadataTest.kt          # Tool metadata handling
+    ├── ToolMetadataTest.kt          # Tool metadata handling
+    └── ToolSearchTest.kt            # Cross-server search logic
 ```
 
 ## Running Tests
@@ -35,22 +36,11 @@ src/commonTest/kotlin/com/mckli/
 # HTTP client tests
 ./gradlew test --tests "com.mckli.http.*"
 
-# IPC tests
-./gradlew test --tests "com.mckli.ipc.*"
+# Transport tests
+./gradlew test --tests "com.mckli.transport.*"
 
-# Tool tests
-./gradlew test --tests "com.mckli.tools.*"
-```
-
-### Integration Tests (Cucumber)
-
-```bash
-# Run all integration tests
+# Integration tests (Cucumber)
 ./gradlew test --tests "com.mckli.integration.CucumberTestRunner"
-
-# Run specific features by tag
-./gradlew test --tests "com.mckli.integration.CucumberTestRunner" -Dcucumber.filter.tags="@daemon"
-```
 
 ### Run Single Test Class
 
@@ -95,20 +85,20 @@ src/commonTest/kotlin/com/mckli/
   - Response with error parsing
   - Error serialization
 
-- ✅ **ConnectionPoolTest** - Pool lifecycle
-  - Initialization with config
-  - Metrics tracking
-  - Shutdown cleanup
-  - Force shutdown
-  - Metrics data class operations
+#### Transport Tests
+- ✅ **TransportFactoryTest** - Protocol selection
+  - Correct transport for HTTP/SSE
+- ✅ **ReconnectionStrategyTest** - Backoff logic
+  - Exponential backoff verification
+  - Max delay capping
+  - Jitter application
 
-#### IPC Tests
-- ✅ **IpcMessageTest** - IPC protocol
-  - McpRequest serialization
-  - ListTools serialization
-  - DescribeTool serialization
-  - CallTool with arguments
-  - RefreshTools serialization
+#### Integration Tests (Cucumber)
+- ✅ **SSE Transport** - Real SSE server interaction
+- ✅ **Tool Discovery** - Discovery via unified daemon
+- ✅ **Tool Invocation** - Execution via unified daemon
+- ✅ **Daemon Lifecycle** - Auto-start and manual stop
+- ✅ **Configuration** - CLI config management
   - Success response handling
   - Error response handling
   - Complex roundtrip preservation
@@ -116,10 +106,11 @@ src/commonTest/kotlin/com/mckli/
 #### Tool Tests
 - ✅ **ToolMetadataTest** - Tool metadata
   - Metadata serialization
-  - Metadata without schema
   - ToolList deserialization from MCP
   - Complex schema handling
-  - Null description handling
+- ✅ **ToolSearchTest** - Tool search
+  - Local filtering logic
+  - Cross-server result merging
 
 ### Integration Tests (Completed)
 

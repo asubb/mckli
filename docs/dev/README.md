@@ -23,33 +23,33 @@ Technical documentation for developing and contributing to mckli.
 │              CLI Process                   │
 │  (stateless, invoked per command)          │
 │                                            │
-│  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │  Config  │  │  Daemon  │  │  Tools  │ │
-│  │ Commands │  │ Commands │  │Commands │ │
-│  └─────┬────┘  └─────┬────┘  └────┬────┘ │
-│        └──────────────┼────────────┘      │
-│                   ┌───▼────┐              │
-│                   │Request │              │
-│                   │Router  │              │
-│                   └───┬────┘              │
+│  ┌──────────┐  ┌──────────┐  ┌─────────┐   │
+│  │  Config  │  │  Daemon  │  │  Tools  │   │
+│  │ Commands │  │ Commands │  │Commands │   │
+│  └─────┬────┘  └─────┬────┘  └────┬────┘   │
+│        └──────────────┼────────────┘       │
+│                   ┌───▼────┐               │
+│                   │Request │               │
+│                   │Router  │               │
+│                   └───┬────┘               │
 └───────────────────────┼────────────────────┘
-                        │ IPC (Unix sockets)
+                        │ HTTP API (Port 5030)
                         │
 ┌───────────────────────▼────────────────────┐
-│         Daemon Process (per server)        │
-│      (long-lived, one per MCP server)      │
+│         Unified Daemon Process             │
+│      (long-lived, handles ALL servers)     │
 │                                            │
-│  ┌──────────────┐  ┌─────────────────┐   │
-│  │ IPC Server   │  │   Tool Cache    │   │
-│  │ (Unix Socket)│  │   (in-memory)   │   │
-│  └──────┬───────┘  └────────┬────────┘   │
-│         │                    │            │
-│    ┌────▼────────────────────▼───────┐   │
-│    │    Connection Pool              │   │
-│    │  (HTTP client lifecycle mgmt)   │   │
-│    └────────────┬────────────────────┘   │
+│  ┌──────────────┐  ┌─────────────────┐     │
+│  │ HTTP Server  │  │   Tool Cache    │     │
+│  │ (Ktor/Netty) │  │   (per server)  │     │
+│  └──────┬───────┘  └────────┬────────┘     │
+│         │                    │             │
+│    ┌────▼────────────────────▼───────┐     │
+│    │    Connection Pool              │     │
+│    │  (HTTP/SSE lifecycle mgmt)      │     │
+│    └────────────┬────────────────────┘     │
 └─────────────────┼──────────────────────────┘
-                  │ HTTP/HTTPS
+                  │ HTTP/HTTPS or SSE
                   │ (persistent connections)
                   │
           ┌───────▼────────┐
@@ -63,21 +63,20 @@ Technical documentation for developing and contributing to mckli.
 
 ```
 1. User: mckli tools call myserver read-file --json {...}
-2. CLI: Parse arguments, create IpcRequest
-3. RequestRouter: Check if daemon running → auto-start if needed
-4. RequestRouter: Connect to Unix socket
-5. Daemon IPC Server: Receive request
-6. Daemon: Route to ToolCache
-7. ToolCache: Build MCP request
-8. ConnectionPool: Execute via HTTP client
-9. HTTP Client: POST to MCP server
+2. CLI: Parse arguments, create request
+3. RequestRouter: Check if unified daemon running → auto-start if needed
+4. RequestRouter: Send HTTP POST to localhost:5030/servers/myserver/tools/call
+5. Daemon HTTP Server: Receive request
+6. Daemon: Route to appropriate ServerContext
+7. ServerContext: Route to ToolCache
+8. ToolCache: Execute call via ConnectionPool
+9. ConnectionPool: Execute via Ktor HTTP client (SSE or HTTP)
 10. MCP Server: Process and respond
-11. HTTP Client: Parse response
-12. ConnectionPool: Return to ToolCache
-13. ToolCache: Format result
-14. IPC Server: Send IpcResponse
-15. RequestRouter: Receive response
-16. CLI: Display formatted output to user
+11. Ktor Client: Parse response
+12. ToolCache: Format result
+13. HTTP Server: Send HTTP response
+14. RequestRouter: Receive response
+15. CLI: Display formatted output to user
 ```
 
 ---
@@ -88,53 +87,43 @@ Technical documentation for developing and contributing to mckli.
 
 ```
 src/
-├── commonMain/kotlin/com/mckli/
-│   ├── Main.kt                    # Entry point
+├── main/kotlin/com/mckli/
+│   ├── Main.kt                    # Entry point (CLI)
 │   ├── MckliCommand.kt            # Root CLI command
 │   │
 │   ├── config/                    # Configuration management
 │   │   ├── ServerConfig.kt        # Data models
-│   │   ├── ConfigManager.kt       # Abstract config I/O
+│   │   ├── ConfigManager.kt       # Config I/O
 │   │   └── ConfigCommands.kt      # CLI commands
 │   │
 │   ├── daemon/                    # Daemon lifecycle
-│   │   ├── DaemonProcess.kt       # Abstract daemon control
+│   │   ├── UnifiedDaemon.kt       # Unified daemon logic
+│   │   ├── UnifiedDaemonServer.kt # Ktor HTTP server
+│   │   ├── DaemonProcess.kt       # Daemon process control
 │   │   └── DaemonCommands.kt      # CLI commands
 │   │
-│   ├── http/                      # HTTP client layer
+│   ├── http/                      # Protocol layer
 │   │   ├── McpRequest.kt          # MCP protocol types
-│   │   ├── HttpMcpClient.kt       # Ktor HTTP client
-│   │   └── ConnectionPool.kt      # Connection lifecycle
+│   │   └── DaemonHttpClient.kt    # Client for daemon API
 │   │
-│   ├── ipc/                       # Inter-process communication
-│   │   └── IpcMessage.kt          # IPC protocol types
+│   ├── tools/                     # Tool management
+│   │   ├── ToolCache.kt           # Metadata and execution
+│   │   └── ToolSearchService.kt   # Cross-server search
 │   │
+│   ├── transport/                 # MCP Transport
+│   │   ├── TransportFactory.kt    # SSE/HTTP factory
+│   │   └── ReconnectionStrategy.kt
 │   ├── client/                    # CLI-side request routing
-│   │   └── RequestRouter.kt       # Abstract IPC client
+│   │   └── RequestRouter.kt       # CLI-to-daemon routing
 │   │
 │   └── tools/                     # Tool discovery & invocation
 │       ├── ToolMetadata.kt        # Tool data models
 │       ├── ToolCache.kt           # In-memory cache
+│       ├── ToolSearchService.kt   # Cross-server search
 │       └── ToolCommands.kt        # CLI commands
 │
-├── jvmMain/kotlin/com/mckli/
-│   ├── config/
-│   │   └── ConfigManager.jvm.kt   # File I/O implementation
-│   │
-│   ├── daemon/
-│   │   ├── DaemonProcess.jvm.kt   # Process spawning
-│   │   └── DaemonMain.kt          # Daemon entry point
-│   │
-│   ├── ipc/
-│   │   ├── UnixSocketServer.kt    # IPC server
-│   │   └── UnixSocketClient.kt    # IPC client
-│   │
-│   └── client/
-│       └── RequestRouter.jvm.kt   # IPC implementation
-│
-└── nativeMain/kotlin/com/mckli/
-    └── config/
-        └── ConfigManager.native.kt # Native file I/O
+└── resources/
+    └── logback.xml                # Logging configuration
 ```
 
 ### Module Responsibilities
@@ -142,11 +131,11 @@ src/
 | Module     | Responsibility                                            |
 |------------|-----------------------------------------------------------|
 | **config** | Server configuration CRUD, validation, persistence        |
-| **daemon** | Daemon process lifecycle, PID management, process control |
-| **http**   | HTTP client, MCP protocol, connection pooling             |
-| **ipc**    | Unix socket communication, message serialization          |
+| **daemon** | Unified daemon logic, Ktor server, process management     |
+| **http**   | Protocol types and CLI HTTP client (to daemon)            |
+| **transport**| MCP Transport implementation (SSE/HTTP)                  |
 | **client** | CLI-to-daemon routing, auto-start, error handling         |
-| **tools**  | Tool discovery, caching, invocation                       |
+| **tools**  | Tool discovery, caching, invocation, search               |
 
 ---
 
@@ -184,122 +173,98 @@ sealed class AuthConfig {
 - JVM: Uses `java.io.File` for JSON I/O
 - Native: Uses C interop with `fopen`/`fgets`
 
-### 2. HTTP Client
+### 2. HTTP Transport (to MCP Servers)
 
-**Files:** `http/HttpMcpClient.kt`, `http/ConnectionPool.kt`
+**Files:** `transport/TransportFactory.kt`, `transport/ReconnectionStrategy.kt`
 
 **Responsibilities:**
 
-- Send MCP requests to remote servers via HTTP POST
-- Handle authentication (headers)
-- Manage connection lifecycle (idle timeout, max lifetime)
-- Error handling (network, HTTP errors, timeouts)
+- Implement MCP transport protocols (SSE, HTTP)
+- Manage persistent connections to MCP servers
+- Handle automatic reconnection with backoff
+- Manage connection lifecycle (idle timeout, pool size)
 
 **Key Classes:**
 
 ```kotlin
-class HttpMcpClient(config: ServerConfig) {
-    private val client: HttpClient  // Ktor CIO engine
-
+interface McpTransport {
+    suspend fun start()
+    suspend fun stop()
     suspend fun sendRequest(request: McpRequest): Result<McpResponse>
 }
 
-class ConnectionPool(config: ServerConfig) {
-    suspend fun <T> executeRequest(block: suspend (HttpMcpClient) -> T): T
-    suspend fun shutdown()
-}
+class SseTransport(config: ServerConfig) : McpTransport { ... }
+class HttpTransport(config: ServerConfig) : McpTransport { ... }
 ```
 
 **Features:**
 
-- Ktor CIO engine for connection pooling
-- Automatic timeout handling
+- Default SSE support for modern MCP servers
+- Fallback to HTTP for legacy servers
+- Persistent connection pooling via Ktor client
 - Retry logic with exponential backoff
 - Connection validation before reuse
 
 ### 3. Daemon Process
 
-**Files:** `daemon/DaemonProcess.kt`, `daemon/DaemonMain.kt`
+**Files:** `daemon/DaemonProcess.kt`, `daemon/DaemonMain.kt`, `daemon/UnifiedDaemon.kt`, `daemon/UnifiedDaemonServer.kt`
 
 **Responsibilities:**
 
-- Spawn daemon as separate process
-- Manage PID files in `~/.mckli/daemons/`
+- Spawn the unified daemon as a separate background process
+- Manage the PID file in `~/.mckli/daemons/daemon.pid`
 - Handle SIGTERM for graceful shutdown
-- Initialize HTTP client and tool cache on startup
+- Initialize all configured MCP servers and their tool caches
+- Expose a REST API via Ktor/Netty on port 5030
 
-**JVM Implementation:**
+**Unified Daemon Lifecycle:**
 
 ```kotlin
-class DaemonProcess(config: ServerConfig) {
-    fun start(): Result<Unit>  // Spawn with ProcessBuilder
-    fun stop(force: Boolean): Result<Unit>  // SIGTERM or SIGKILL
-    fun isRunning(): Boolean  // Check PID validity
+class UnifiedDaemon {
+    suspend fun start()    // Initializes servers from config
+    suspend fun shutdown() // Graceful cleanup of all connections
+}
+
+class UnifiedDaemonServer(daemonManager: DaemonManager) {
+    fun start() // Starts Ktor server on port 5030
+    fun stop()
 }
 ```
 
-**Daemon Main:**
+### 4. Daemon API (formerly IPC)
 
-```kotlin
-// DaemonMain.kt
-fun main(args: Array<String>) {
-    val serverName = args[0]
-    val daemon = Daemon(serverName)
-    daemon.start()  // Blocks forever until SIGTERM
-}
-```
-
-### 4. IPC Layer
-
-**Files:** `ipc/IpcMessage.kt`, `ipc/UnixSocketServer.kt`, `ipc/UnixSocketClient.kt`
+**Files:** `daemon/UnifiedDaemonServer.kt`, `http/DaemonHttpClient.kt`
 
 **Responsibilities:**
 
-- Define request/response protocol
-- Unix domain socket server (daemon side)
-- Unix domain socket client (CLI side)
+- Provide a stable HTTP interface between CLI and Daemon
+- Standardize request/response formats using JSON
 
-**Protocol:**
+**Key Endpoints:**
 
-```kotlin
-sealed class IpcRequest {
-    data class McpRequest(id, method, params)
-    data class ListTools(id, filter)
-    data class CallTool(id, toolName, arguments)
-    // ...
-}
-
-sealed class IpcResponse {
-    data class Success(id, result)
-    data class Error(id, error, details)
-}
-```
-
-**Socket Communication:**
-
-- One request per connection
-- Line-based protocol (JSON + newline)
-- Concurrent connections handled with coroutines
+- `GET /health`: Unified status of all managed servers
+- `GET /servers/{name}/tools`: List tools for a specific server
+- `POST /servers/{name}/tools/call`: Execute a tool on a specific server
+- `POST /servers/{name}/refresh`: Force metadata refresh
 
 ### 5. Tool Cache
 
-**Files:** `tools/ToolCache.kt`, `tools/ToolMetadata.kt`
+**Files:** `tools/ToolCache.kt`, `tools/ToolMetadata.kt`, `tools/ToolSearchService.kt`
 
 **Responsibilities:**
 
-- Fetch tool list on daemon startup
-- Cache in-memory for fast access
-- Provide query interface (list, describe)
-- Forward tool calls to MCP server
+- Fetch tool lists on server initialization
+- Maintain in-memory cache of tool schemas and metadata
+- Provide cross-server tool searching
+- Forward tool calls to MCP transport layer
 
 **Key Operations:**
 
 ```kotlin
-class ToolCache(connectionPool: ConnectionPool) {
-    suspend fun refresh()  // Fetch from MCP server
-    suspend fun listTools(filter: String?): List<ToolMetadata>
-    suspend fun getTool(name: String): ToolMetadata?
-    suspend fun callTool(name, args, pool): Result<JsonElement>
+class ToolCache(transport: McpTransport) {
+    suspend fun refresh()
+    fun listTools(filter: String?): List<ToolMetadata>
+    suspend fun callTool(name: String, arguments: JsonObject?): Result<JsonElement>
 }
 ```
 
@@ -309,25 +274,20 @@ class ToolCache(connectionPool: ConnectionPool) {
 
 **Responsibilities:**
 
-- Route CLI requests to appropriate daemon
-- Auto-start daemons if not running
-- Handle IPC connection errors
-- Format responses for display
+- Route CLI commands to the Unified Daemon via HTTP
+- Automatically start the daemon if it's not running
+- Handle connection timeouts and daemon failures
+- Gracefully handle server-specific errors
 
 **Flow:**
 
-```kotlin
-class RequestRouter(serverName: String?) {
-    fun callTool(toolName, arguments): Result<JsonElement> {
-        // 1. Get server config
-        // 2. Check daemon status
-        // 3. Auto-start if needed
-        // 4. Connect to Unix socket
-        // 5. Send IPC request
-        // 6. Return response
-    }
-}
-```
+1. CLI command invoked (e.g., `tools call`)
+2. `RequestRouter` checks if daemon is alive (`GET /health`)
+3. If not alive, `DaemonProcess` spawns a new background JVM process
+4. `RequestRouter` waits for daemon to become ready
+5. Request is forwarded to Daemon API
+6. Daemon processes request and returns JSON
+7. CLI formats and displays result
 
 ---
 
